@@ -361,7 +361,18 @@ export const DocumentHub: React.FC<DocumentHubProps> = ({ documents, travelers, 
                 <span className="hidden sm:inline">Drive</span>
               </button>
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  console.log('[DocHub] Scan File clicked');
+                  console.log('[DocHub] fileInputRef.current:', fileInputRef.current);
+                  if (fileInputRef.current) {
+                    fileInputRef.current.value = ''; // Reset to allow re-selecting same file
+                    fileInputRef.current.click();
+                    console.log('[DocHub] File input click triggered');
+                  } else {
+                    console.error('[DocHub] File input ref is null!');
+                    alert('File picker not available. Please refresh the page.');
+                  }
+                }}
                 className="text-xs bg-dynac-sand/30 hover:bg-dynac-sand text-dynac-darkChoc px-2 py-1 rounded flex items-center gap-1 transition"
               >
                 <Download size={12} className="rotate-180" /> Scan File
