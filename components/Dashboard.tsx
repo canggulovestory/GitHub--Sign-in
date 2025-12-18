@@ -244,24 +244,58 @@ export const Dashboard: React.FC<DashboardProps> = ({ itinerary, onSwapRequest, 
       'Indonesian': { morning: 'Selamat Pagi', afternoon: 'Selamat Siang', evening: 'Selamat Malam', code: 'id-ID' },
       'French': { morning: 'Bonjour', afternoon: 'Bonjour', evening: 'Bonsoir', code: 'fr-FR' },
       'Spanish': { morning: 'Buenos días', afternoon: 'Buenas tardes', evening: 'Buenas noches', code: 'es-ES' },
-      'Examples': { morning: 'Hello', afternoon: 'Hello', evening: 'Hello', code: 'en-US' },
-      'Arabic': { morning: 'Sabah al-khair', afternoon: 'Masa al-khair', evening: 'Masa al-khair', code: 'ar-AE' },
-      'Japanese': { morning: 'Ohayou', afternoon: 'Konnichiwa', evening: 'Konbanwa', code: 'ja-JP' },
+      'Arabic': { morning: 'صباح الخير', afternoon: 'مساء الخير', evening: 'مساء الخير', code: 'ar-AE' },
+      'Japanese': { morning: 'おはようございます', afternoon: 'こんにちは', evening: 'こんばんは', code: 'ja-JP' },
       'Italian': { morning: 'Buongiorno', afternoon: 'Buon pomeriggio', evening: 'Buonasera', code: 'it-IT' },
+      'Thai': { morning: 'สวัสดีครับ', afternoon: 'สวัสดีครับ', evening: 'สวัสดีครับ', code: 'th-TH' },
+      'Hindi': { morning: 'नमस्ते', afternoon: 'नमस्ते', evening: 'नमस्ते', code: 'hi-IN' },
+      'Mandarin': { morning: '早上好', afternoon: '下午好', evening: '晚上好', code: 'zh-CN' },
+      'Korean': { morning: '안녕하세요', afternoon: '안녕하세요', evening: '안녕하세요', code: 'ko-KR' },
+      'Portuguese': { morning: 'Bom dia', afternoon: 'Boa tarde', evening: 'Boa noite', code: 'pt-BR' },
+      'Turkish': { morning: 'Günaydın', afternoon: 'İyi günler', evening: 'İyi akşamlar', code: 'tr-TR' },
       'English': { morning: 'Good Morning', afternoon: 'Good Afternoon', evening: 'Good Evening', code: 'en-US' },
     };
 
-    const targetLang = greetings[currentDay.language] || greetings['English'];
+    // Auto-detect language based on location if not properly set
+    const locationLower = currentDay.location.toLowerCase();
+    let detectedLang = currentDay.language;
+
+    // UAE locations should use Arabic
+    if (locationLower.includes('abu dhabi') || locationLower.includes('dubai') ||
+      locationLower.includes('sharjah') || locationLower.includes('uae') ||
+      locationLower.includes('emirates')) {
+      detectedLang = 'Arabic';
+    } else if (locationLower.includes('bali') || locationLower.includes('jakarta') || locationLower.includes('indonesia')) {
+      detectedLang = 'Indonesian';
+    } else if (locationLower.includes('tokyo') || locationLower.includes('japan') || locationLower.includes('osaka')) {
+      detectedLang = 'Japanese';
+    } else if (locationLower.includes('paris') || locationLower.includes('france')) {
+      detectedLang = 'French';
+    } else if (locationLower.includes('amsterdam') || locationLower.includes('netherlands')) {
+      detectedLang = 'Dutch';
+    } else if (locationLower.includes('rome') || locationLower.includes('italy') || locationLower.includes('milan')) {
+      detectedLang = 'Italian';
+    } else if (locationLower.includes('bangkok') || locationLower.includes('thailand')) {
+      detectedLang = 'Thai';
+    } else if (locationLower.includes('berlin') || locationLower.includes('germany') || locationLower.includes('munich')) {
+      detectedLang = 'German';
+    } else if (locationLower.includes('madrid') || locationLower.includes('spain') || locationLower.includes('barcelona')) {
+      detectedLang = 'Spanish';
+    } else if (locationLower.includes('istanbul') || locationLower.includes('turkey')) {
+      detectedLang = 'Turkish';
+    }
+
+    const targetLang = greetings[detectedLang] || greetings['English'];
     const textToSpeak = targetLang[timeOfDay];
     setGreetingText(textToSpeak);
     setIsPlayingGreeting(true);
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.rate = 0.9;
+    utterance.rate = 0.85;
 
-    // Voice Selection (Simplified)
+    // Voice Selection
     const targetCode = targetLang.code.toLowerCase();
-    const selectedVoice = voices.find(v => v.lang.replace('_', '-').toLowerCase() === targetCode && v.name.includes("Google"))
+    const selectedVoice = voices.find(v => v.lang.replace('_', '-').toLowerCase().startsWith(targetCode.split('-')[0]))
       || voices.find(v => v.lang.replace('_', '-').toLowerCase() === targetCode);
 
     if (selectedVoice) {
@@ -273,7 +307,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ itinerary, onSwapRequest, 
 
     utterance.onend = () => {
       setIsPlayingGreeting(false);
-      setTimeout(() => setGreetingText(''), 2000);
+      setTimeout(() => setGreetingText(''), 3000);
     };
     utterance.onerror = () => { setIsPlayingGreeting(false); setGreetingText('Audio unavailable'); };
     window.speechSynthesis.speak(utterance);
@@ -343,48 +377,56 @@ export const Dashboard: React.FC<DashboardProps> = ({ itinerary, onSwapRequest, 
       )}
 
       {/* Weather & Location & Currency */}
-      <div className="bg-dynac-sand p-4 rounded-xl border border-dynac-lightBrown/5 shadow-sm">
+      <div className="bg-gradient-to-br from-dynac-sand to-dynac-sand/80 p-5 rounded-2xl border border-dynac-lightBrown/10 shadow-lg">
         <div className="flex justify-between items-start">
           <div className="flex-1 pr-4">
-            <div className="flex items-center gap-2">
-              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(currentDay.location)}`} target="_blank" rel="noopener noreferrer" className="text-xl font-bold text-dynac-darkChoc leading-tight hover:underline decoration-dynac-lightBrown/30 flex items-center gap-2 group">
+            {/* Location Title - Proper Capitalization */}
+            <div className="flex items-center gap-3 mb-3">
+              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(currentDay.location)}`} target="_blank" rel="noopener noreferrer" className="text-2xl font-bold text-dynac-darkChoc leading-tight hover:underline decoration-dynac-lightBrown/30 flex items-center gap-2 group capitalize">
                 {currentDay.location}
                 <ExternalLink size={14} className="opacity-0 group-hover:opacity-50 transition-opacity" />
               </a>
-              {/* CURRENCY BADGE */}
-              {currencyDisplay && (
-                <span className="flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-2 py-1 rounded-full border border-green-200 shadow-sm whitespace-nowrap">
-                  <DollarSign size={10} /> {currencyDisplay}
-                </span>
-              )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              <span className="text-dynac-nutBrown text-xs font-medium hidden md:inline">{dateDetails.full}</span>
-              <span className="w-1 h-1 bg-dynac-nutBrown/40 rounded-full hidden md:inline"></span>
+            {/* Date & Greeting Row */}
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <span className="text-dynac-nutBrown text-sm font-medium">{dateDetails.full}</span>
+              <span className="w-1 h-1 bg-dynac-nutBrown/40 rounded-full"></span>
               <button
                 onClick={handlePlayGreeting}
                 disabled={isPlayingGreeting}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition-all duration-300 ${isPlayingGreeting ? 'bg-dynac-lightBrown text-dynac-cream border-dynac-lightBrown scale-105' : 'bg-dynac-cream/80 text-dynac-darkChoc border-dynac-lightBrown/10 hover:bg-white hover:shadow-sm'}`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold border transition-all duration-300 ${isPlayingGreeting
+                  ? 'bg-dynac-lightBrown text-dynac-cream border-dynac-lightBrown scale-105 shadow-md'
+                  : 'bg-white text-dynac-darkChoc border-dynac-lightBrown/20 hover:bg-dynac-cream hover:shadow-md hover:border-dynac-lightBrown/40'}`}
               >
-                <Volume2 size={12} className={isPlayingGreeting ? 'animate-pulse' : ''} />
-                <span className="font-bold">{greetingText || "Play Local Greeting"}</span>
+                <Volume2 size={14} className={isPlayingGreeting ? 'animate-pulse' : ''} />
+                <span>{greetingText || "🗣️ Play Local Greeting"}</span>
               </button>
             </div>
-            <div className="flex flex-wrap gap-2 mt-3">
-              {/* Weather Forecast */}
-              <div className="flex items-center gap-2 bg-white/60 p-1.5 rounded text-xs text-dynac-darkChoc font-medium border border-dynac-sand">
-                <CloudRain size={12} className="text-blue-500" />
+
+            {/* Currency Badge */}
+            {currencyDisplay && (
+              <div className="mb-4">
+                <span className="inline-flex items-center gap-1.5 text-sm font-bold text-green-700 bg-green-100 px-3 py-1.5 rounded-full border border-green-200 shadow-sm">
+                  <DollarSign size={14} />
+                  {currencyDisplay}
+                </span>
+              </div>
+            )}
+
+            {/* Weather & Outfit Info */}
+            <div className="flex flex-wrap gap-2">
+              <div className="flex items-center gap-2 bg-white/80 px-3 py-2 rounded-lg text-sm text-dynac-darkChoc font-medium border border-dynac-sand shadow-sm">
+                <CloudRain size={14} className="text-blue-500" />
                 <span>{currentDay.weather.tempMax} / {currentDay.weather.tempMin} • {currentDay.weather.condition}</span>
               </div>
-              {/* UV Index */}
-              <div className="flex items-center gap-2 bg-white/60 p-1.5 rounded text-xs text-dynac-darkChoc font-medium border border-dynac-sand">
+              <div className="flex items-center gap-2 bg-white/80 px-3 py-2 rounded-lg text-sm text-dynac-darkChoc font-medium border border-dynac-sand shadow-sm">
                 <span className="text-orange-500 font-bold">UV</span>
                 <span>{currentDay.weather.uvIndex}</span>
               </div>
-              {/* Outfit */}
-              <div className="flex items-center gap-2 bg-white/40 p-1.5 rounded text-xs text-dynac-nutBrown border border-dynac-sand/50">
-                <Shirt size={12} /> {currentDay.outfit}
+              <div className="flex items-center gap-2 bg-white/60 px-3 py-2 rounded-lg text-sm text-dynac-nutBrown border border-dynac-sand/50">
+                <Shirt size={14} />
+                {currentDay.outfit}
               </div>
             </div>
           </div>
