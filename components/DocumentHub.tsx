@@ -361,7 +361,7 @@ export const DocumentHub: React.FC<DocumentHubProps> = ({ documents, travelers, 
                   className="flex-1 p-2 text-sm border rounded bg-dynac-cream border-dynac-sand focus:border-dynac-lightBrown outline-none"
                 >
                   <option value="booking">Hotel Booking</option>
-                  <option value="passport">Passport</option>
+                  <option value="ticket">Flight/Train Ticket</option>
                   <option value="visa">Visa</option>
                   <option value="insurance">Insurance</option>
                 </select>
@@ -428,10 +428,10 @@ export const DocumentHub: React.FC<DocumentHubProps> = ({ documents, travelers, 
       {/* Categories */}
       <div className="grid grid-cols-2 gap-4">
         <DocCategory
-          title="Passports"
-          count={filteredDocuments.filter(d => d.type === 'passport').length}
-          icon={<ShieldCheck className="text-dynac-success" />}
-          onClick={() => setViewCategory('passport')}
+          title="Tickets"
+          count={filteredDocuments.filter(d => d.type === 'ticket').length}
+          icon={<Plane className="text-blue-500" />}
+          onClick={() => setViewCategory('ticket')}
         />
         <DocCategory
           title="Visas"

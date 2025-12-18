@@ -154,6 +154,9 @@ GENERATE JSON with this EXACT structure:
 Generate the complete ${duration}-day itinerary now. Return ONLY valid JSON, no markdown or explanations.`;
 
   try {
+    console.log("[TripGen] Starting trip proposal generation for:", destination, duration, "days");
+    console.log("[TripGen] Using Gemini model: gemini-2.0-flash");
+
     const result = await ai.models.generateContent({
       model: "gemini-2.0-flash",
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -163,19 +166,33 @@ Generate the complete ${duration}-day itinerary now. Return ONLY valid JSON, no 
       }
     });
 
+    console.log("[TripGen] Raw API response:", result);
+
     const text = (result as any).text ? (result as any).text() : (result as any).response?.text();
-    if (!text) throw new Error("No text content from AI");
+    console.log("[TripGen] Extracted text:", text?.substring(0, 200) + "...");
+
+    if (!text) {
+      console.error("[TripGen] No text in response");
+      throw new Error("No text content from AI");
+    }
 
     const parsed = JSON.parse(text);
+    console.log("[TripGen] Parsed response keys:", Object.keys(parsed));
+
     // Handle simplified response if AI ignores the wrapper
     if (Array.isArray(parsed)) {
+      console.log("[TripGen] Response is array, using as itinerary directly");
       return { itinerary: parsed, currency: 'USD' }; // Fallback
     }
-    return { itinerary: parsed.itinerary, currency: parsed.currency };
 
-  } catch (e) {
-    console.error("Trip Generation Failed", e);
-    throw e;
+    console.log("[TripGen] Success! Days generated:", parsed.itinerary?.length || 0);
+    return { itinerary: parsed.itinerary, currency: parsed.currency || 'USD' };
+
+  } catch (e: any) {
+    console.error("[TripGen] Failed:", e);
+    console.error("[TripGen] Error message:", e?.message);
+    console.error("[TripGen] Error status:", e?.status);
+    throw new Error(`Trip generation failed: ${e?.message || 'Unknown error'}`);
   }
 };
 
@@ -184,7 +201,7 @@ export const analyzeDocumentImage = async (
   fileBase64: string,
   mimeType: string
 ): Promise<{
-  type: 'passport' | 'visa' | 'insurance' | 'booking';
+  type: 'ticket' | 'visa' | 'insurance' | 'booking';
   name: string;
   docId: string;
   expiry: string;
@@ -199,21 +216,52 @@ export const analyzeDocumentImage = async (
 [TASK]
 Analyze the uploaded travel document image and extract key details.
 
+[DOCUMENT TYPES TO DETECT]
+1. **ticket** - Flight tickets, train tickets, bus tickets, boarding passes
+   - Look for: Airline names, flight numbers, train numbers, PNR/Booking Reference, passenger names
+   - Extract booking/confirmation number as docId
+   - Name format: "[Airline/Train] - [Passenger Name] - [Route]" (e.g., "Emirates - John Doe - DXB→AMS")
+   
+2. **visa** - Travel visas, entry permits
+   - Look for: Visa number, validity dates, issuing country
+   - Extract visa number as docId
+   
+3. **insurance** - Travel insurance documents
+   - Look for: Policy number, coverage dates, insured name
+   - Extract policy number as docId
+   
+4. **booking** - Hotel bookings, accommodation confirmations
+   - Look for: Hotel name, confirmation number, check-in/out dates
+   - Extract confirmation number as docId
+
 [OUTPUT FORMAT]
 Return ONLY valid JSON with this structure:
 {
-  "type": "passport" | "visa" | "insurance" | "booking",
-  "name": "string", // A short, descriptive name (e.g., "Passport - John Doe")
-  "docId": "string", // usage: Passport Number, Visa Number, Booking Ref
-  "expiry": "DD-MM-YYYY" // Format strictly as DD-MM-YYYY. If not found or not applicable, returns empty string.
+  "type": "ticket" | "visa" | "insurance" | "booking",
+  "name": "string", // A descriptive name. For tickets: "[Carrier] - [Passenger] - [Route]"
+  "docId": "string", // Booking Reference/PNR for tickets, Visa/Policy number for others
+  "expiry": "DD-MM-YYYY" // Travel date for tickets, expiry date for visas. Format strictly as DD-MM-YYYY. If not found, return empty string.
 }
 
 [RULES]
-- If the document is a Passport, extract the Passport Number as 'docId'.
-- If the document is a Visa, extract the Visa Number.
-- If the document is a Hotel/Flight Booking, extract the Confirmation Number/PNR.
-- For Expiry Date: Look for "Date of Expiry", "Valid Until", "Good Thru".
-- Handle image artifacts gracefully. if unclear, return best guess or empty string.
+1. For TICKETS (flight/train):
+   - docId should be the Booking Reference, PNR, or Confirmation Number
+   - name should include: Carrier name, Passenger name, and Route (FROM → TO)
+   - expiry should be the travel/departure date
+   
+2. For VISAS: 
+   - docId is the Visa Number
+   - expiry is the visa validity end date
+   
+3. For INSURANCE:
+   - docId is the Policy Number
+   - expiry is the policy end date
+   
+4. For BOOKINGS (hotels):
+   - docId is the Confirmation Number
+   - expiry is the Check-out date
+
+5. Handle image artifacts gracefully. If unclear, return best guess or empty string.
   `;
 
   try {

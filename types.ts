@@ -68,9 +68,9 @@ export interface UserPreferences {
 export interface DocumentFile {
   id: string;
   name: string;
-  type: 'passport' | 'visa' | 'insurance' | 'booking';
+  type: 'ticket' | 'visa' | 'insurance' | 'booking';
   expiry?: string;
-  documentId?: string; // e.g. Passport Number
+  documentId?: string; // e.g. Booking Reference, PNR, Visa Number
   travelerId?: string;
   tripId?: string; // Links document to a specific trip. If undefined, it is a Global document.
   fileContent?: string; // Base64 encoded image data for viewing
