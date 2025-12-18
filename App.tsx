@@ -315,7 +315,7 @@ const App: React.FC = () => {
             active={activeTab === AppTab.TRANSLATE}
             onClick={() => handleTabChange(AppTab.TRANSLATE)}
             icon={<Languages size={20} />}
-            label="Translate"
+            label="Tools"
           />
           <NavButton
             active={activeTab === AppTab.DOCUMENTS}
@@ -505,7 +505,7 @@ const App: React.FC = () => {
             active={activeTab === AppTab.TRANSLATE}
             onClick={() => handleTabChange(AppTab.TRANSLATE)}
             icon={<Languages size={20} />}
-            label="Translate"
+            label="Tools"
           />
           <MobileBottomNavButton
             active={activeTab === AppTab.DOCUMENTS}
