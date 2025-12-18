@@ -30,11 +30,11 @@ import {
   Plane,
   PlusCircle,
   LogOut,
-  Crown,
   Map,
   Download
 } from 'lucide-react';
 import { generateAIStudioExport } from './utils/exportUtils';
+import { supabase, isSupabaseConfigured } from './services/supabase';
 
 const App: React.FC = () => {
   // --- AUTHENTICATION STATE ---
@@ -60,31 +60,6 @@ const App: React.FC = () => {
 
   // --- HANDLERS ---
   // --- HANDLERS ---
-  const loadDataForUser = (userProfile: UserProfile) => {
-    const savedData = loadUserData(userProfile.email);
-    if (savedData) {
-      console.log(`[App] Loading data for ${userProfile.email}`);
-      setTrips(savedData.trips || []);
-      setDocuments(savedData.documents || []);
-      setPreferences(savedData.preferences || INITIAL_PREFERENCES);
-      setTravelers(savedData.travelers || []);
-      setChatHistory(savedData.chatHistory || []);
-      setChecklist(savedData.checklist || []);
-    } else {
-      console.log(`[App] No saved data for ${userProfile.email}, initializing defaults.`);
-      setTrips([]);
-      setDocuments([]); // Start clean for new user
-      setPreferences(INITIAL_PREFERENCES);
-      setTravelers([{
-        id: 't-me',
-        name: userProfile.name,
-        nationality: 'United States',
-        passportNumber: ''
-      }]);
-      setChatHistory([]);
-      setChecklist(MOCK_CHECKLIST);
-    }
-  };
 
   const handleLogin = (userProfile: UserProfile) => {
     setUser(userProfile);
@@ -203,17 +178,7 @@ const App: React.FC = () => {
     setIsMenuOpen(false);
   };
 
-  const handleUpgrade = () => {
-    if (user) {
-      const confirmUpgrade = window.confirm("Upgrade to GAIDE Premium for advanced Visa Intelligence?");
-      if (confirmUpgrade) {
-        const updatedUser = { ...user, subscriptionTier: 'Premium' as const }; // Force strict literal type if needed
-        setUser(updatedUser);
-        saveSession(updatedUser); // Update session with premium status
-        alert("Upgrade Successful! Premium features unlocked.");
-      }
-    }
-  };
+
 
   // Determine current language based on today's date vs active trip itinerary
   const getCurrentLanguage = () => {
@@ -231,6 +196,7 @@ const App: React.FC = () => {
   // --- PERSISTENCE EFFECT ---
   useEffect(() => {
     if (user && user.email) {
+      // Local Backup
       saveUserData(user.email, {
         trips,
         documents,
@@ -239,8 +205,84 @@ const App: React.FC = () => {
         chatHistory,
         checklist
       });
+
+      // Cloud Sync
+      const syncToCloud = async () => {
+        if (!isSupabaseConfigured || import.meta.env.VITE_USE_CLOUD_STORAGE !== 'true') return;
+
+        console.log(`[CloudSync] Syncing data for ${user.email} to Supabase`);
+        const { error } = await supabase
+          .from('user_data')
+          .upsert({
+            email: user.email,
+            data: {
+              trips,
+              documents,
+              preferences,
+              travelers,
+              chatHistory,
+              checklist
+            },
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'email' });
+
+        if (error) console.error("[CloudSync] Sync failed:", error);
+      };
+
+      const timeoutId = setTimeout(syncToCloud, 2000); // Debounce sync
+      return () => clearTimeout(timeoutId);
     }
   }, [trips, documents, preferences, travelers, chatHistory, checklist, user]);
+
+  const loadCloudData = async (email: string) => {
+    if (!isSupabaseConfigured || import.meta.env.VITE_USE_CLOUD_STORAGE !== 'true') return null;
+
+    console.log(`[CloudSync] Fetching data for ${email} from Supabase`);
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('data')
+      .eq('email', email)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+      console.error("[CloudSync] Load failed:", error);
+      return null;
+    }
+
+    return data?.data || null;
+  };
+
+  // Modified loadDataForUser to check cloud first
+  const loadDataForUser = async (userProfile: UserProfile) => {
+    // 1. Try Cloud
+    const cloudData = await loadCloudData(userProfile.email);
+
+    // 2. Try Local if cloud fails or is empty
+    const savedData = cloudData || loadUserData(userProfile.email);
+
+    if (savedData) {
+      console.log(`[App] Loading data for ${userProfile.email} (${cloudData ? 'Cloud' : 'Local'})`);
+      setTrips(savedData.trips || []);
+      setDocuments(savedData.documents || []);
+      setPreferences(savedData.preferences || INITIAL_PREFERENCES);
+      setTravelers(savedData.travelers || []);
+      setChatHistory(savedData.chatHistory || []);
+      setChecklist(savedData.checklist || []);
+    } else {
+      console.log(`[App] No saved data for ${userProfile.email}, initializing defaults.`);
+      setTrips([]);
+      setDocuments([]);
+      setPreferences(INITIAL_PREFERENCES);
+      setTravelers([{
+        id: 't-me',
+        name: userProfile.name,
+        nationality: 'United States',
+        passportNumber: ''
+      }]);
+      setChatHistory([]);
+      setChecklist(MOCK_CHECKLIST);
+    }
+  };
 
   // --- SESSION INIT EFFECT ---
   useEffect(() => {
@@ -261,7 +303,7 @@ const App: React.FC = () => {
     <div className="flex flex-col h-screen bg-dynac-cream text-dynac-darkChoc font-sans overflow-hidden">
 
       {/* Header */}
-      <header className="flex-none p-4 bg-dynac-deepBrown border-b border-dynac-lightBrown/10 flex justify-between items-center z-30 relative shadow-md">
+      <header className="flex-none p-4 bg-premium-gradient border-b border-white/5 flex justify-between items-center z-30 relative shadow-premium">
         <div className="flex items-center gap-2" onClick={() => setActiveTab(AppTab.TRIPS)}>
           <div className="w-8 h-8 rounded bg-dynac-cream flex items-center justify-center font-bold text-dynac-deepBrown shadow-sm cursor-pointer">
             G
@@ -276,15 +318,6 @@ const App: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {user.subscriptionTier === 'Free' && (
-            <button
-              onClick={handleUpgrade}
-              className="hidden md:flex items-center gap-1 bg-dynac-lightBrown text-dynac-cream text-xs px-3 py-1.5 rounded-full font-bold border border-dynac-sand/30 hover:bg-white/10 transition"
-            >
-              <Crown size={12} className="text-yellow-400" />
-              Upgrade
-            </button>
-          )}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="md:hidden text-dynac-cream hover:opacity-80 transition-opacity"
@@ -298,7 +331,7 @@ const App: React.FC = () => {
       <div className="flex flex-1 overflow-hidden relative">
 
         {/* Desktop Sidebar */}
-        <nav className="hidden md:flex flex-col w-64 bg-dynac-cream border-r border-dynac-lightBrown/10 p-4 space-y-2">
+        <nav className="hidden md:flex flex-col w-64 bg-warm-gradient border-r border-dynac-sand/30 p-4 space-y-2 shadow-soft">
           <NavButton
             active={activeTab === AppTab.TRIPS}
             onClick={() => handleTabChange(AppTab.TRIPS)}
@@ -357,12 +390,7 @@ const App: React.FC = () => {
               </div>
               <div className="overflow-hidden">
                 <p className="text-sm font-bold truncate">{user.name}</p>
-                <div className="flex items-center gap-1">
-                  <p className="text-xs text-dynac-nutBrown truncate">{user.subscriptionTier}</p>
-                  {user.subscriptionTier === 'Free' && (
-                    <button onClick={handleUpgrade} className="text-[10px] text-blue-600 font-bold hover:underline">Upgrade</button>
-                  )}
-                </div>
+                <p className="text-xs text-dynac-nutBrown truncate">{user.email}</p>
               </div>
             </div>
             <button onClick={handleLogout} className="flex items-center gap-2 text-xs text-red-500 hover:text-red-700 p-2 w-full">
@@ -409,11 +437,6 @@ const App: React.FC = () => {
                     <div className="text-dynac-sand/60 text-xs">{user.email}</div>
                   </div>
                 </div>
-                {user.subscriptionTier === 'Free' && (
-                  <button onClick={handleUpgrade} className="w-full mt-2 mb-2 text-xs bg-yellow-500/20 text-yellow-200 py-2 rounded font-bold border border-yellow-500/30">
-                    Upgrade to Premium
-                  </button>
-                )}
                 <button onClick={handleLogout} className="w-full mt-2 text-xs bg-red-500/20 text-red-300 py-2 rounded font-bold">
                   Log Out
                 </button>
@@ -484,7 +507,6 @@ const App: React.FC = () => {
                 user={user}
                 onAddDocument={handleAddDocument}
                 onDeleteDocument={handleDeleteDocument}
-                onUpgradeRequest={handleUpgrade}
               />
             )}
 
@@ -560,12 +582,14 @@ const App: React.FC = () => {
 const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
   <button
     onClick={onClick}
-    className={`flex items - center gap - 3 w - full p - 3 rounded - lg transition - all ${active
-      ? 'bg-dynac-lightBrown text-dynac-cream font-medium shadow-sm'
-      : 'text-dynac-lightBrown/80 hover:bg-dynac-sand'
-      } `}
+    className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 ${active
+      ? 'bg-dynac-lightBrown text-dynac-cream font-medium shadow-soft'
+      : 'text-dynac-lightBrown/80 hover:bg-dynac-sand/50 hover:shadow-sm'
+      }`}
   >
-    {icon}
+    <div className={`transition-transform duration-200 ${active ? 'scale-110' : ''}`}>
+      {icon}
+    </div>
     <span>{label}</span>
   </button>
 );
@@ -573,10 +597,10 @@ const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: React.Re
 const MobileBottomNavButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
   <button
     onClick={onClick}
-    className={`flex flex - col items - center justify - center w - full gap - 1 p - 1 transition - all ${active ? 'text-dynac-cream' : 'text-dynac-sand/40 hover:text-dynac-sand/60'
-      } `}
+    className={`flex flex-col items-center justify-center w-full gap-1 p-1 transition-all duration-200 ${active ? 'text-dynac-cream' : 'text-dynac-sand/40 hover:text-dynac-sand/60'
+      }`}
   >
-    <div className={`p - 1.5 rounded - full transition - all ${active ? 'bg-white/10' : 'bg-transparent'} `}>
+    <div className={`p-1.5 rounded-full transition-all duration-200 ${active ? 'bg-white/15 shadow-glow scale-110' : 'bg-transparent'}`}>
       {icon}
     </div>
     <span className="text-[10px] font-medium">{label}</span>

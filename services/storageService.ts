@@ -1,5 +1,5 @@
-
 import { DocumentFile } from '../types';
+import { supabase, isSupabaseConfigured } from './supabase';
 
 export interface StorageAdapter {
     upload(file: File, path?: string): Promise<string>;
@@ -7,7 +7,6 @@ export interface StorageAdapter {
 }
 
 // ADAPTER 1: LocalStorage (Base64)
-// Fallback for immediate use and offline support
 class LocalStorageAdapter implements StorageAdapter {
     async upload(file: File): Promise<string> {
         return new Promise((resolve, reject) => {
@@ -19,45 +18,58 @@ class LocalStorageAdapter implements StorageAdapter {
     }
 
     async delete(path: string): Promise<void> {
-        // No-op for local base64 strings as they are stored in the object itself
         console.log("Deleted local content ref");
     }
 }
 
-// ADAPTER 2: AWS S3 (Cloud)
-// Ready for production configuration
-class S3StorageAdapter implements StorageAdapter {
+// ADAPTER 2: Supabase (Cloud)
+class CloudStorageAdapter implements StorageAdapter {
     private bucket: string;
-    private region: string;
 
-    constructor(bucket: string, region: string) {
+    constructor(bucket: string) {
         this.bucket = bucket;
-        this.region = region;
     }
 
     async upload(file: File, path: string): Promise<string> {
-        // Placeholder for actual S3 upload
-        // In production: use AWS SDK v3
-        console.log(`[S3 Mock] Uploading ${file.name} to s3://${this.bucket}/${path}`);
+        if (!isSupabaseConfigured) {
+            console.warn("Supabase not configured, falling back to local storage");
+            return new LocalStorageAdapter().upload(file);
+        }
 
-        // For now, fall back to base64 to keep app working until keys are provided
-        return new LocalStorageAdapter().upload(file);
+        const { data, error } = await supabase.storage
+            .from(this.bucket)
+            .upload(path, file, { upsert: true });
+
+        if (error) {
+            console.error("Supabase Upload Error:", error);
+            throw error;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+            .from(this.bucket)
+            .getPublicUrl(data.path);
+
+        return publicUrl;
     }
 
     async delete(path: string): Promise<void> {
-        console.log(`[S3 Mock] Deleting s3://${this.bucket}/${path}`);
+        if (!isSupabaseConfigured) return;
+        const { error } = await supabase.storage
+            .from(this.bucket)
+            .remove([path]);
+
+        if (error) console.error("Supabase Delete Error:", error);
     }
 }
 
 // FACTORY
 export const createStorageService = (): StorageAdapter => {
-    // Check for Env Vars to switch mode
     const useCloud = import.meta.env.VITE_USE_CLOUD_STORAGE === 'true';
-    const bucket = import.meta.env.VITE_AWS_BUCKET;
+    const bucket = import.meta.env.VITE_SUPABASE_BUCKET || 'documents';
 
-    if (useCloud && bucket) {
-        console.log("Using Cloud Storage (S3)");
-        return new S3StorageAdapter(bucket, import.meta.env.VITE_AWS_REGION || 'us-east-1');
+    if (useCloud && isSupabaseConfigured) {
+        console.log("Using Cloud Storage (Supabase)");
+        return new CloudStorageAdapter(bucket);
     }
 
     console.log("Using Local Storage (Base64)");

@@ -13,19 +13,59 @@
           extend: {
             colors: {
               dynac: {
-                cream: '#F8f8f7',      // Main Background (Updated to White #F8f8f7)
+                cream: '#F8F8F7',      // Main Background
                 sand: '#E6E2DD',       // Subtle Cards/Secondary
                 lightBrown: '#341E14', // Primary Buttons/Active Boxes (Dark Brown)
                 deepBrown: '#341E14',  // Header/Footer Background
                 darkChoc: '#1A1512',   // Primary Text (Almost Black)
                 nutBrown: '#8C7B70',   // Secondary Text/Borders
                 alert: '#ef4444',
-                success: '#10b981'
+                success: '#10b981',
+                // Premium accent colors
+                gold: '#D4A574',
+                accent: '#6366f1', // Indigo for highlights
               }
             },
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
             },
+            backgroundImage: {
+              'premium-gradient': 'linear-gradient(135deg, #341E14 0%, #5c3d2e 50%, #341E14 100%)',
+              'glass-gradient': 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
+              'warm-gradient': 'linear-gradient(180deg, #F8F8F7 0%, #E6E2DD 100%)',
+            },
+            boxShadow: {
+              'soft': '0 4px 20px -2px rgba(52, 30, 20, 0.08)',
+              'premium': '0 8px 32px -4px rgba(52, 30, 20, 0.12)',
+              'glow': '0 0 20px rgba(212, 165, 116, 0.3)',
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.3s ease-out',
+              'slide-up': 'slideUp 0.4s ease-out',
+              'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
+              'shimmer': 'shimmer 2s linear infinite',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { opacity: '0', transform: 'translateY(10px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              pulseSoft: {
+                '0%, 100%': { opacity: '1' },
+                '50%': { opacity: '0.7' },
+              },
+              shimmer: {
+                '0%': { backgroundPosition: '-200% 0' },
+                '100%': { backgroundPosition: '200% 0' },
+              },
+            },
+            backdropBlur: {
+              xs: '2px',
+            }
           },
         },
       }

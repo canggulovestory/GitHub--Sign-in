@@ -67,7 +67,7 @@ ${currentContext.checklist.map(c => `- ${c.item}: ${c.isConfirmed ? 'CONFIRMED' 
     const contents = [...historyContents, currentContent];
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: contents,
       config: {
         systemInstruction: dynamicContext,
@@ -97,45 +97,65 @@ export const generateTripProposal = async (
 
   const ai = new GoogleGenAI({ apiKey });
 
+  const today = new Date();
+  const startDate = new Date(today);
+  startDate.setDate(today.getDate() + 7); // Start trip in 7 days
+
   const prompt = `
-[TASK]
-Generate a COMPREHENSIVE, FULL-DAY ${duration}-day travel itinerary for a ${travelers} trip to ${destination}.
-Focus deeply on SIGHTSEEING, LOCAL CULTURE, and HIDDEN GEMS.
+You are an expert travel planner. Generate a detailed ${duration}-day travel itinerary for ${destination}.
 
-[USER PREFERENCES]
-- Vibe: ${preferences.nightlife}
-- Dietary: ${preferences.dietary.join(', ')}
-- Avoid: ${preferences.customAvoidances.join(', ')}
+TRAVELER INFO: ${travelers}
+PREFERENCES: 
+- Vibe/Style: ${preferences.nightlife || 'Balanced mix of activities'}
+- Dietary Requirements: ${preferences.dietary.length > 0 ? preferences.dietary.join(', ') : 'None specified'}
+- Must Avoid: ${preferences.customAvoidances.length > 0 ? preferences.customAvoidances.join(', ') : 'None specified'}
+- Family Friendly: ${preferences.familyFriendly ? 'Yes' : 'No'}
 
-[OUTPUT FORMAT]
-Return ONLY valid JSON with this structure:
+IMPORTANT RULES:
+1. Each day MUST have 5-7 activities spread across Morning, Afternoon, and Evening
+2. Include SPECIFIC venue names and addresses (not generic descriptions)
+3. Include a mix of: iconic landmarks, hidden gems, local restaurants, cultural experiences
+4. Activities should flow logically by location to minimize travel time
+5. Respect all dietary and avoidance preferences strictly
+6. Include estimated costs where applicable
+
+GENERATE JSON with this EXACT structure:
 {
-  "currency": "string", // 3-letter ISO code (e.g. USD, EUR, JPY)
+  "currency": "XXX", // Local 3-letter ISO code (e.g., "JPY" for Japan, "EUR" for France)
   "itinerary": [
     {
-      "day": number,
-      "date": "string", // Future dates YYYY-MM-DD
-      "location": "string",
-      "items": [...],
-      "weather": {...},
-      "outfit": "string",
-      "language": "string",
-      "activeAlerts": []
+      "day": 1,
+      "date": "${startDate.toISOString().split('T')[0]}", // YYYY-MM-DD format, increment for each day
+      "location": "${destination}",
+      "language": "Local language name",
+      "outfit": "Weather-appropriate clothing suggestion",
+      "weather": {
+        "tempMax": "25°C",
+        "tempMin": "18°C", 
+        "condition": "Sunny/Cloudy/Rainy",
+        "precipChance": "10%",
+        "uvIndex": "5"
+      },
+      "activeAlerts": [],
+      "items": [
+        {
+          "id": "unique-id-1",
+          "time": "09:00",
+          "activity": "Name of activity or place",
+          "type": "sightseeing|dining|activity|transport|leisure",
+          "location": "Specific address or area",
+          "notes": "Brief helpful tip or detail"
+        }
+      ]
     }
   ]
 }
 
-[CONSTRAINTS]
-- PACKED ITERINARY: Ensure "Morning", "Afternoon", and "Evening" sections are fully populated.
-- MINIMUM 5-7 items per day.
-- Include specific "Sightseeing" landmarks.
-- Ensure logical flow (morning -> afternoon -> evening).
-- Respect "Avoid" preferences strictly.
-    `;
+Generate the complete ${duration}-day itinerary now. Return ONLY valid JSON, no markdown or explanations.`;
 
   try {
     const result = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         temperature: 0.7,
@@ -201,7 +221,7 @@ Return ONLY valid JSON with this structure:
     const cleanBase64 = fileBase64.split(',')[1] || fileBase64;
 
     const result = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: [
         {
           role: 'user',

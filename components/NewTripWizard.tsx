@@ -168,7 +168,7 @@ export const NewTripWizard: React.FC<NewTripWizardProps> = ({ onComplete, onCanc
                const { itinerary: draft, currency } = await generateTripProposal(
                   formData.destination,
                   formData.duration,
-                  `${formData.adults} Adults, ${formData.children} Children`,
+                  `${formData.adults} Adults, ${formData.infants} Children`,
                   INITIAL_PREFERENCES
                );
                setDraftItinerary(draft);
@@ -200,12 +200,18 @@ export const NewTripWizard: React.FC<NewTripWizardProps> = ({ onComplete, onCanc
    };
 
    return (
-      <div className="h-full flex flex-col bg-dynac-cream">
-         <div className="p-6 border-b border-dynac-lightBrown/10">
+      <div className="h-full flex flex-col bg-warm-gradient page-transition">
+         <div className="p-6 border-b border-dynac-sand/30">
             <h2 className="text-2xl font-bold text-dynac-darkChoc">Plan New Trip</h2>
             <div className="flex gap-2 mt-4">
                {[1, 2, 3, 4, 5].map(s => (
-                  <div key={s} className={`h-1 flex-1 rounded-full ${step >= s ? 'bg-dynac-lightBrown' : 'bg-dynac-sand'}`} />
+                  <div
+                     key={s}
+                     className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${step >= s
+                           ? 'bg-dynac-lightBrown shadow-sm'
+                           : 'bg-dynac-sand'
+                        } ${step === s ? 'scale-y-125' : ''}`}
+                  />
                ))}
             </div>
          </div>

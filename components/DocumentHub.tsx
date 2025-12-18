@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { DocumentFile, Traveler, DayPlan, UserProfile, Trip } from '../types';
-import { FileText, ShieldCheck, AlertTriangle, Lock, Plus, X, Eye, Calendar, User, Download, Clock, Trash2, Crown, Plane } from 'lucide-react';
+import { FileText, ShieldCheck, AlertTriangle, Lock, Plus, X, Eye, Calendar, User, Download, Clock, Trash2, Plane } from 'lucide-react';
 import { BiometricLayer } from './BiometricLayer';
 import { analyzeDocumentImage } from '../services/geminiService';
 import { storageService } from '../services/storageService';
@@ -15,10 +15,9 @@ interface DocumentHubProps {
   user: UserProfile;
   onAddDocument: (doc: DocumentFile) => void;
   onDeleteDocument: (id: string) => void;
-  onUpgradeRequest: () => void;
 }
 
-export const DocumentHub: React.FC<DocumentHubProps> = ({ documents, travelers, itinerary, activeTrip, user, onAddDocument, onDeleteDocument, onUpgradeRequest }) => {
+export const DocumentHub: React.FC<DocumentHubProps> = ({ documents, travelers, itinerary, activeTrip, user, onAddDocument, onDeleteDocument }) => {
   // ID 070: Secondary Biometric Security State
   const [isBiometricVerified, setIsBiometricVerified] = useState(false);
 
