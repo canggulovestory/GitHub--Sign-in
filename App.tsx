@@ -34,7 +34,6 @@ import {
   Download
 } from 'lucide-react';
 import { generateAIStudioExport } from './utils/exportUtils';
-import { supabase, isSupabaseConfigured } from './services/supabase';
 
 const App: React.FC = () => {
   // --- AUTHENTICATION STATE ---
@@ -196,72 +195,30 @@ const App: React.FC = () => {
   // --- PERSISTENCE EFFECT ---
   useEffect(() => {
     if (user && user.email) {
-      // Local Backup
-      saveUserData(user.email, {
+      const dataToSave = {
         trips,
         documents,
         preferences,
         travelers,
         chatHistory,
         checklist
-      });
-
-      // Cloud Sync
-      const syncToCloud = async () => {
-        if (!isSupabaseConfigured || import.meta.env.VITE_USE_CLOUD_STORAGE !== 'true') return;
-
-        console.log(`[CloudSync] Syncing data for ${user.email} to Supabase`);
-        const { error } = await supabase
-          .from('user_data')
-          .upsert({
-            email: user.email,
-            data: {
-              trips,
-              documents,
-              preferences,
-              travelers,
-              chatHistory,
-              checklist
-            },
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'email' });
-
-        if (error) console.error("[CloudSync] Sync failed:", error);
       };
 
-      const timeoutId = setTimeout(syncToCloud, 2000); // Debounce sync
+      // Debounce save to avoid hammering LocalStorage and Supabase
+      const timeoutId = setTimeout(async () => {
+        await saveUserData(user.email, dataToSave);
+      }, 2000);
+
       return () => clearTimeout(timeoutId);
     }
   }, [trips, documents, preferences, travelers, chatHistory, checklist, user]);
 
-  const loadCloudData = async (email: string) => {
-    if (!isSupabaseConfigured || import.meta.env.VITE_USE_CLOUD_STORAGE !== 'true') return null;
-
-    console.log(`[CloudSync] Fetching data for ${email} from Supabase`);
-    const { data, error } = await supabase
-      .from('user_data')
-      .select('data')
-      .eq('email', email)
-      .single();
-
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
-      console.error("[CloudSync] Load failed:", error);
-      return null;
-    }
-
-    return data?.data || null;
-  };
-
-  // Modified loadDataForUser to check cloud first
+  // Unified Load Data
   const loadDataForUser = async (userProfile: UserProfile) => {
-    // 1. Try Cloud
-    const cloudData = await loadCloudData(userProfile.email);
-
-    // 2. Try Local if cloud fails or is empty
-    const savedData = cloudData || loadUserData(userProfile.email);
+    const savedData = await loadUserData(userProfile.email);
 
     if (savedData) {
-      console.log(`[App] Loading data for ${userProfile.email} (${cloudData ? 'Cloud' : 'Local'})`);
+      console.log(`[App] Loading data for ${userProfile.email}`);
       setTrips(savedData.trips || []);
       setDocuments(savedData.documents || []);
       setPreferences(savedData.preferences || INITIAL_PREFERENCES);
