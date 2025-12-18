@@ -1,0 +1,8 @@
+{
+  "name": "GAIDE - AI Travel OS",
+  "description": "A dynamic, context-aware travel operating system integrating itinerary management, document storage, and proactive AI assistance.",
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation"
+  ]
+}

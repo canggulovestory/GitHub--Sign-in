@@ -1,0 +1,68 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GAIDE - AI Travel OS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              dynac: {
+                cream: '#F8f8f7',      // Main Background (Updated to White #F8f8f7)
+                sand: '#E6E2DD',       // Subtle Cards/Secondary
+                lightBrown: '#341E14', // Primary Buttons/Active Boxes (Dark Brown)
+                deepBrown: '#341E14',  // Header/Footer Background
+                darkChoc: '#1A1512',   // Primary Text (Almost Black)
+                nutBrown: '#8C7B70',   // Secondary Text/Borders
+                alert: '#ef4444',
+                success: '#10b981'
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+          },
+        },
+      }
+    </script>
+    <style>
+      body {
+        background-color: #F8f8f7; /* Updated Background */
+        color: #1A1512; /* Dark Chocolate */
+      }
+      /* Custom scrollbar for sleeker look */
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #F8f8f7;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #341E14; /* Dark Brown */
+        border-radius: 3px;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "jwt-decode": "https://esm.sh/jwt-decode@4.0.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
