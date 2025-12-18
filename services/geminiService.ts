@@ -205,6 +205,16 @@ export const analyzeDocumentImage = async (
   name: string;
   docId: string;
   expiry: string;
+  // Ticket-specific fields
+  airline?: string;
+  flightNumber?: string;
+  route?: string;
+  departureTime?: string;
+  gate?: string;
+  terminal?: string;
+  seat?: string;
+  checkInUrl?: string;
+  passengerName?: string;
 }> => {
   // ID 001/045: Strict Environment Variable Usage
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -214,54 +224,51 @@ export const analyzeDocumentImage = async (
 
   const prompt = `
 [TASK]
-Analyze the uploaded travel document image and extract key details.
+Analyze the uploaded travel document image and extract ALL available details.
 
 [DOCUMENT TYPES TO DETECT]
-1. **ticket** - Flight tickets, train tickets, bus tickets, boarding passes
-   - Look for: Airline names, flight numbers, train numbers, PNR/Booking Reference, passenger names
-   - Extract booking/confirmation number as docId
-   - Name format: "[Airline/Train] - [Passenger Name] - [Route]" (e.g., "Emirates - John Doe - DXB→AMS")
-   
+1. **ticket** - Flight tickets, train tickets, bus tickets, boarding passes, e-tickets
 2. **visa** - Travel visas, entry permits
-   - Look for: Visa number, validity dates, issuing country
-   - Extract visa number as docId
-   
 3. **insurance** - Travel insurance documents
-   - Look for: Policy number, coverage dates, insured name
-   - Extract policy number as docId
-   
 4. **booking** - Hotel bookings, accommodation confirmations
-   - Look for: Hotel name, confirmation number, check-in/out dates
-   - Extract confirmation number as docId
 
 [OUTPUT FORMAT]
 Return ONLY valid JSON with this structure:
 {
   "type": "ticket" | "visa" | "insurance" | "booking",
-  "name": "string", // A descriptive name. For tickets: "[Carrier] - [Passenger] - [Route]"
-  "docId": "string", // Booking Reference/PNR for tickets, Visa/Policy number for others
-  "expiry": "DD-MM-YYYY" // Travel date for tickets, expiry date for visas. Format strictly as DD-MM-YYYY. If not found, return empty string.
+  "name": "string", // For tickets: "[Airline] - [Passenger] - [Route]"
+  "docId": "string", // PNR/Booking Reference/Confirmation Number
+  "expiry": "DD-MM-YYYY", // Travel date for tickets, expiry for visas
+  
+  // TICKET-SPECIFIC FIELDS (only include if type is "ticket"):
+  "airline": "string", // Airline or train company name
+  "flightNumber": "string", // Flight/train number (e.g., "EK384")
+  "route": "string", // Route format: "XXX → YYY"
+  "departureTime": "string", // 24-hour format (e.g., "14:30")
+  "gate": "string", // Gate number if visible
+  "terminal": "string", // Terminal if visible
+  "seat": "string", // Seat assignment if visible
+  "checkInUrl": "string", // Online check-in URL
+  "passengerName": "string" // Full passenger name
 }
 
-[RULES]
-1. For TICKETS (flight/train):
-   - docId should be the Booking Reference, PNR, or Confirmation Number
-   - name should include: Carrier name, Passenger name, and Route (FROM → TO)
-   - expiry should be the travel/departure date
-   
-2. For VISAS: 
-   - docId is the Visa Number
-   - expiry is the visa validity end date
-   
-3. For INSURANCE:
-   - docId is the Policy Number
-   - expiry is the policy end date
-   
-4. For BOOKINGS (hotels):
-   - docId is the Confirmation Number
-   - expiry is the Check-out date
+[CHECK-IN URL RULES]
+Generate check-in URL based on airline if not visible in document:
+- Emirates: "https://www.emirates.com/english/manage-booking/online-check-in/"
+- KLM: "https://www.klm.com/check-in"
+- Qatar Airways: "https://www.qatarairways.com/en/manage-booking.html"
+- Etihad: "https://www.etihad.com/en/manage/online-check-in"
+- Singapore Airlines: "https://www.singaporeair.com/en_UK/manage-booking/"
+- British Airways: "https://www.britishairways.com/travel/managebooking/"
+- Lufthansa: "https://www.lufthansa.com/online-check-in"
+- Air France: "https://www.airfrance.com/check-in"
 
-5. Handle image artifacts gracefully. If unclear, return best guess or empty string.
+[RULES]
+1. For TICKETS: Extract ALL visible flight details
+2. For VISAS: Extract visa number, validity dates
+3. For INSURANCE: Extract policy number, coverage dates
+4. For BOOKINGS: Extract confirmation number, hotel name, dates
+5. If any field is not visible, return empty string for that field.
   `;
 
   try {

@@ -24,7 +24,24 @@ export const DocumentHub: React.FC<DocumentHubProps> = ({ documents, travelers, 
   const [isAdding, setIsAdding] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false); // AI State
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [newDoc, setNewDoc] = useState<{ name: string, type: DocumentFile['type'], expiry: string, scope: 'global' | 'trip', docId: string, fileContent: string }>({
+  const [newDoc, setNewDoc] = useState<{
+    name: string,
+    type: DocumentFile['type'],
+    expiry: string,
+    scope: 'global' | 'trip',
+    docId: string,
+    fileContent: string,
+    // Ticket-specific
+    airline?: string,
+    flightNumber?: string,
+    route?: string,
+    departureTime?: string,
+    gate?: string,
+    terminal?: string,
+    seat?: string,
+    checkInUrl?: string,
+    passengerName?: string
+  }>({
     name: '', type: 'booking', expiry: '', scope: 'trip', docId: '', fileContent: ''
   });
   const [selectedDoc, setSelectedDoc] = useState<DocumentFile | null>(null);
@@ -165,14 +182,24 @@ export const DocumentHub: React.FC<DocumentHubProps> = ({ documents, travelers, 
         // 3. Send to Gemini
         const result = await analyzeDocumentImage(base64DataForGemini, mimeType);
 
-        // 4. Update State
+        // 4. Update State with all extracted fields
         setNewDoc(prev => ({
           ...prev,
           name: result.name || file.name.split('.')[0],
           type: result.type,
           expiry: result.expiry,
           docId: result.docId || '',
-          fileContent: contentString // Ensure it persists
+          fileContent: contentString,
+          // Ticket-specific fields
+          airline: result.airline || '',
+          flightNumber: result.flightNumber || '',
+          route: result.route || '',
+          departureTime: result.departureTime || '',
+          gate: result.gate || '',
+          terminal: result.terminal || '',
+          seat: result.seat || '',
+          checkInUrl: result.checkInUrl || '',
+          passengerName: result.passengerName || ''
         }));
 
       } catch (apiError) {
@@ -233,10 +260,20 @@ export const DocumentHub: React.FC<DocumentHubProps> = ({ documents, travelers, 
         name: newDoc.name,
         type: newDoc.type,
         expiry: newDoc.expiry || undefined,
-        documentId: newDoc.docId, // Pass the extracted ID
+        documentId: newDoc.docId,
         status: computedStatus,
         tripId: newDoc.scope === 'trip' && activeTrip ? activeTrip.id : undefined,
-        fileContent: newDoc.fileContent
+        fileContent: newDoc.fileContent,
+        // Ticket-specific fields
+        airline: newDoc.airline,
+        flightNumber: newDoc.flightNumber,
+        route: newDoc.route,
+        departureTime: newDoc.departureTime,
+        gate: newDoc.gate,
+        terminal: newDoc.terminal,
+        seat: newDoc.seat,
+        checkInUrl: newDoc.checkInUrl,
+        passengerName: newDoc.passengerName
       });
       setIsAdding(false);
       setNewDoc({ name: '', type: 'booking', expiry: '', scope: 'trip', docId: '', fileContent: '' });
@@ -595,6 +632,82 @@ export const DocumentHub: React.FC<DocumentHubProps> = ({ documents, travelers, 
                       {selectedDoc.status.toUpperCase()}
                     </span>
                   </div>
+
+                  {/* Ticket-Specific Details */}
+                  {selectedDoc.type === 'ticket' && (
+                    <>
+                      <div className="border-t border-dynac-lightBrown/20 pt-3 mt-3">
+                        <h4 className="text-xs font-bold text-dynac-lightBrown uppercase tracking-wider mb-2 flex items-center gap-1">
+                          <Plane size={12} /> Flight Details
+                        </h4>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          {selectedDoc.airline && (
+                            <div>
+                              <span className="text-dynac-nutBrown text-xs">Airline</span>
+                              <p className="font-bold text-dynac-darkChoc">{selectedDoc.airline}</p>
+                            </div>
+                          )}
+                          {selectedDoc.flightNumber && (
+                            <div>
+                              <span className="text-dynac-nutBrown text-xs">Flight</span>
+                              <p className="font-bold text-dynac-darkChoc">{selectedDoc.flightNumber}</p>
+                            </div>
+                          )}
+                          {selectedDoc.route && (
+                            <div className="col-span-2">
+                              <span className="text-dynac-nutBrown text-xs">Route</span>
+                              <p className="font-bold text-dynac-darkChoc">{selectedDoc.route}</p>
+                            </div>
+                          )}
+                          {selectedDoc.departureTime && (
+                            <div>
+                              <span className="text-dynac-nutBrown text-xs">Departure</span>
+                              <p className="font-bold text-dynac-darkChoc">{selectedDoc.departureTime}</p>
+                            </div>
+                          )}
+                          {selectedDoc.passengerName && (
+                            <div>
+                              <span className="text-dynac-nutBrown text-xs">Passenger</span>
+                              <p className="font-bold text-dynac-darkChoc">{selectedDoc.passengerName}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Boarding Pass Info - Gate/Terminal/Seat */}
+                      {(selectedDoc.gate || selectedDoc.terminal || selectedDoc.seat) && (
+                        <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mt-3">
+                          <h4 className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-2">🎫 Boarding Info</h4>
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div>
+                              <span className="text-blue-600 text-xs">Terminal</span>
+                              <p className="font-bold text-blue-800 text-lg">{selectedDoc.terminal || '—'}</p>
+                            </div>
+                            <div>
+                              <span className="text-blue-600 text-xs">Gate</span>
+                              <p className="font-bold text-blue-800 text-lg">{selectedDoc.gate || '—'}</p>
+                            </div>
+                            <div>
+                              <span className="text-blue-600 text-xs">Seat</span>
+                              <p className="font-bold text-blue-800 text-lg">{selectedDoc.seat || '—'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Check-in Link Button */}
+                      {selectedDoc.checkInUrl && (
+                        <a
+                          href={selectedDoc.checkInUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 w-full py-3 bg-green-600 text-white rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition"
+                        >
+                          <Plane size={18} /> Online Check-In
+                        </a>
+                      )}
+                    </>
+                  )}
                 </div>
 
                 <div className="flex gap-3">

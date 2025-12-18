@@ -75,6 +75,16 @@ export interface DocumentFile {
   tripId?: string; // Links document to a specific trip. If undefined, it is a Global document.
   fileContent?: string; // Base64 encoded image data for viewing
   status: 'valid' | 'expiring' | 'missing' | 'required' | 'expired';
+  // Ticket-specific fields (for flights/trains)
+  airline?: string; // e.g. "Emirates", "KLM", "NS Trains"
+  flightNumber?: string; // e.g. "EK384", "KL123"
+  route?: string; // e.g. "DXB → AMS"
+  departureTime?: string; // e.g. "14:30"
+  gate?: string; // e.g. "A12" - Updated on flight day
+  terminal?: string; // e.g. "Terminal 3"
+  seat?: string; // e.g. "23A"
+  checkInUrl?: string; // Online check-in link
+  passengerName?: string; // e.g. "John Doe"
 }
 
 export interface ChecklistItem {
