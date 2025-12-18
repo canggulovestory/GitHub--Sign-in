@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { DayPlan, ItineraryItem, Alert } from '../types';
-import { MapPin, Clock, Shirt, Volume2, CloudRain, AlertTriangle, Calendar, Info, Plus, X, ChevronRight, ChevronLeft, ExternalLink, PlayCircle, Plane, DollarSign } from 'lucide-react';
+import { MapPin, Clock, Shirt, Volume2, CloudRain, AlertTriangle, Calendar, Info, Plus, X, ChevronRight, ChevronLeft, ExternalLink, Plane, DollarSign, Sun, Cloud, CloudSnow, Droplets } from 'lucide-react';
 
 /* --- HELPERS --- */
 
@@ -139,8 +139,72 @@ export const Dashboard: React.FC<DashboardProps> = ({ itinerary, onSwapRequest, 
 
   // Audio Greeting State
   const [isPlayingGreeting, setIsPlayingGreeting] = useState(false);
-  const [greetingText, setGreetingText] = useState('');
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  // Greetings Map
+  const greetingsMap: Record<string, any> = {
+    'Dutch': { morning: 'Goedemorgen', afternoon: 'Goedemiddag', evening: 'Goedenavond', code: 'nl-NL' },
+    'German': { morning: 'Guten Morgen', afternoon: 'Guten Tag', evening: 'Guten Abend', code: 'de-DE' },
+    'Indonesian': { morning: 'Selamat Pagi', afternoon: 'Selamat Siang', evening: 'Selamat Malam', code: 'id-ID' },
+    'French': { morning: 'Bonjour', afternoon: 'Bonjour', evening: 'Bonsoir', code: 'fr-FR' },
+    'Spanish': { morning: 'Buenos días', afternoon: 'Buenas tardes', evening: 'Buenas noches', code: 'es-ES' },
+    'Arabic': { morning: 'صباح الخير', afternoon: 'مساء الخير', evening: 'مساء الخير', code: 'ar-AE' },
+    'Japanese': { morning: 'おはようございます', afternoon: 'こんにちは', evening: 'こんばんは', code: 'ja-JP' },
+    'Italian': { morning: 'Buongiorno', afternoon: 'Buon pomeriggio', evening: 'Buonasera', code: 'it-IT' },
+    'Thai': { morning: 'สวัสดีครับ', afternoon: 'สวัสดีครับ', evening: 'สวัสดีครับ', code: 'th-TH' },
+    'Hindi': { morning: 'नमस्ते', afternoon: 'नमस्ते', evening: 'नमस्ते', code: 'hi-IN' },
+    'Mandarin': { morning: '早上好', afternoon: '下午好', evening: '晚上好', code: 'zh-CN' },
+    'Korean': { morning: '안녕하세요', afternoon: '안녕하세요', evening: '안녕하세요', code: 'ko-KR' },
+    'Portuguese': { morning: 'Bom dia', afternoon: 'Boa tarde', evening: 'Boa noite', code: 'pt-BR' },
+    'Turkish': { morning: 'Günaydın', afternoon: 'İyi günler', evening: 'İyi akşamlar', code: 'tr-TR' },
+    'English': { morning: 'Good Morning', afternoon: 'Good Afternoon', evening: 'Good Evening', code: 'en-US' },
+  };
+
+  // Get language based on location
+  const getLanguageFromLocation = (location: string): string => {
+    const loc = location.toLowerCase();
+    if (loc.includes('abu dhabi') || loc.includes('dubai') || loc.includes('sharjah') || loc.includes('uae')) return 'Arabic';
+    if (loc.includes('bali') || loc.includes('jakarta') || loc.includes('indonesia')) return 'Indonesian';
+    if (loc.includes('tokyo') || loc.includes('japan') || loc.includes('osaka')) return 'Japanese';
+    if (loc.includes('paris') || loc.includes('france')) return 'French';
+    if (loc.includes('amsterdam') || loc.includes('netherlands')) return 'Dutch';
+    if (loc.includes('rome') || loc.includes('italy') || loc.includes('milan')) return 'Italian';
+    if (loc.includes('bangkok') || loc.includes('thailand')) return 'Thai';
+    if (loc.includes('berlin') || loc.includes('germany') || loc.includes('munich')) return 'German';
+    if (loc.includes('madrid') || loc.includes('spain') || loc.includes('barcelona')) return 'Spanish';
+    if (loc.includes('istanbul') || loc.includes('turkey')) return 'Turkish';
+    if (loc.includes('seoul') || loc.includes('korea')) return 'Korean';
+    if (loc.includes('beijing') || loc.includes('shanghai') || loc.includes('china')) return 'Mandarin';
+    if (loc.includes('mumbai') || loc.includes('delhi') || loc.includes('india')) return 'Hindi';
+    if (loc.includes('lisbon') || loc.includes('portugal') || loc.includes('brazil')) return 'Portuguese';
+    return 'English';
+  };
+
+  // Get time of day
+  const getTimeOfDay = (): 'morning' | 'afternoon' | 'evening' => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'morning';
+    if (hour < 18) return 'afternoon';
+    return 'evening';
+  };
+
+  // Computed greeting based on current time and location
+  const currentGreeting = useMemo(() => {
+    if (!currentDay?.location) return 'Hello';
+    const lang = getLanguageFromLocation(currentDay.location);
+    const timeOfDay = getTimeOfDay();
+    return greetingsMap[lang]?.[timeOfDay] || greetingsMap['English'][timeOfDay];
+  }, [currentDay?.location]);
+
+  // Get weather icon based on condition
+  const getWeatherIcon = (condition: string) => {
+    const cond = condition?.toLowerCase() || '';
+    if (cond.includes('sun') || cond.includes('clear')) return <Sun size={48} className="text-yellow-500" />;
+    if (cond.includes('rain') || cond.includes('shower')) return <CloudRain size={48} className="text-blue-500" />;
+    if (cond.includes('snow')) return <CloudSnow size={48} className="text-blue-300" />;
+    if (cond.includes('cloud') || cond.includes('overcast')) return <Cloud size={48} className="text-gray-400" />;
+    return <Sun size={48} className="text-yellow-400" />;
+  };
 
   // Load voices
   useEffect(() => {
@@ -230,86 +294,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ itinerary, onSwapRequest, 
 
   const handlePlayGreeting = () => {
     if (isPlayingGreeting) return;
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
     let voices = window.speechSynthesis.getVoices();
     if (voices.length === 0 && availableVoices.length > 0) voices = availableVoices;
 
-    const hour = new Date().getHours();
-    let timeOfDay: 'morning' | 'afternoon' | 'evening' = 'afternoon';
-    if (hour < 12) timeOfDay = 'morning';
-    else if (hour >= 18) timeOfDay = 'evening';
-
-    const greetings: Record<string, any> = {
-      'Dutch': { morning: 'Goedemorgen', afternoon: 'Goedemiddag', evening: 'Goedenavond', code: 'nl-NL' },
-      'German': { morning: 'Guten Morgen', afternoon: 'Guten Tag', evening: 'Guten Abend', code: 'de-DE' },
-      'Indonesian': { morning: 'Selamat Pagi', afternoon: 'Selamat Siang', evening: 'Selamat Malam', code: 'id-ID' },
-      'French': { morning: 'Bonjour', afternoon: 'Bonjour', evening: 'Bonsoir', code: 'fr-FR' },
-      'Spanish': { morning: 'Buenos días', afternoon: 'Buenas tardes', evening: 'Buenas noches', code: 'es-ES' },
-      'Arabic': { morning: 'صباح الخير', afternoon: 'مساء الخير', evening: 'مساء الخير', code: 'ar-AE' },
-      'Japanese': { morning: 'おはようございます', afternoon: 'こんにちは', evening: 'こんばんは', code: 'ja-JP' },
-      'Italian': { morning: 'Buongiorno', afternoon: 'Buon pomeriggio', evening: 'Buonasera', code: 'it-IT' },
-      'Thai': { morning: 'สวัสดีครับ', afternoon: 'สวัสดีครับ', evening: 'สวัสดีครับ', code: 'th-TH' },
-      'Hindi': { morning: 'नमस्ते', afternoon: 'नमस्ते', evening: 'नमस्ते', code: 'hi-IN' },
-      'Mandarin': { morning: '早上好', afternoon: '下午好', evening: '晚上好', code: 'zh-CN' },
-      'Korean': { morning: '안녕하세요', afternoon: '안녕하세요', evening: '안녕하세요', code: 'ko-KR' },
-      'Portuguese': { morning: 'Bom dia', afternoon: 'Boa tarde', evening: 'Boa noite', code: 'pt-BR' },
-      'Turkish': { morning: 'Günaydın', afternoon: 'İyi günler', evening: 'İyi akşamlar', code: 'tr-TR' },
-      'English': { morning: 'Good Morning', afternoon: 'Good Afternoon', evening: 'Good Evening', code: 'en-US' },
-    };
-
-    // Auto-detect language based on location if not properly set
-    const locationLower = currentDay.location.toLowerCase();
-    let detectedLang = currentDay.language;
-
-    // UAE locations should use Arabic
-    if (locationLower.includes('abu dhabi') || locationLower.includes('dubai') ||
-      locationLower.includes('sharjah') || locationLower.includes('uae') ||
-      locationLower.includes('emirates')) {
-      detectedLang = 'Arabic';
-    } else if (locationLower.includes('bali') || locationLower.includes('jakarta') || locationLower.includes('indonesia')) {
-      detectedLang = 'Indonesian';
-    } else if (locationLower.includes('tokyo') || locationLower.includes('japan') || locationLower.includes('osaka')) {
-      detectedLang = 'Japanese';
-    } else if (locationLower.includes('paris') || locationLower.includes('france')) {
-      detectedLang = 'French';
-    } else if (locationLower.includes('amsterdam') || locationLower.includes('netherlands')) {
-      detectedLang = 'Dutch';
-    } else if (locationLower.includes('rome') || locationLower.includes('italy') || locationLower.includes('milan')) {
-      detectedLang = 'Italian';
-    } else if (locationLower.includes('bangkok') || locationLower.includes('thailand')) {
-      detectedLang = 'Thai';
-    } else if (locationLower.includes('berlin') || locationLower.includes('germany') || locationLower.includes('munich')) {
-      detectedLang = 'German';
-    } else if (locationLower.includes('madrid') || locationLower.includes('spain') || locationLower.includes('barcelona')) {
-      detectedLang = 'Spanish';
-    } else if (locationLower.includes('istanbul') || locationLower.includes('turkey')) {
-      detectedLang = 'Turkish';
-    }
-
-    const targetLang = greetings[detectedLang] || greetings['English'];
+    const timeOfDay = getTimeOfDay();
+    const lang = getLanguageFromLocation(currentDay.location);
+    const targetLang = greetingsMap[lang] || greetingsMap['English'];
     const textToSpeak = targetLang[timeOfDay];
-    setGreetingText(textToSpeak);
+
     setIsPlayingGreeting(true);
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.rate = 0.85;
+    utterance.rate = 0.8;
+    utterance.volume = 1.0;
 
-    // Voice Selection
+    // Voice Selection - find matching language voice
     const targetCode = targetLang.code.toLowerCase();
     const selectedVoice = voices.find(v => v.lang.replace('_', '-').toLowerCase().startsWith(targetCode.split('-')[0]))
-      || voices.find(v => v.lang.replace('_', '-').toLowerCase() === targetCode);
+      || voices.find(v => v.lang.replace('_', '-').toLowerCase() === targetCode)
+      || voices.find(v => v.lang.toLowerCase().startsWith(targetCode.split('-')[0]));
 
     if (selectedVoice) {
       utterance.voice = selectedVoice;
       utterance.lang = selectedVoice.lang;
+      console.log(`[Greeting] Using voice: ${selectedVoice.name} (${selectedVoice.lang})`);
     } else {
       utterance.lang = targetLang.code;
+      console.log(`[Greeting] No matching voice found, using lang: ${targetLang.code}`);
     }
 
-    utterance.onend = () => {
+    utterance.onend = () => setIsPlayingGreeting(false);
+    utterance.onerror = (e) => {
+      console.error('[Greeting] Speech error:', e);
       setIsPlayingGreeting(false);
-      setTimeout(() => setGreetingText(''), 3000);
     };
-    utterance.onerror = () => { setIsPlayingGreeting(false); setGreetingText('Audio unavailable'); };
+
     window.speechSynthesis.speak(utterance);
   };
 
@@ -378,9 +401,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ itinerary, onSwapRequest, 
 
       {/* Weather & Location & Currency */}
       <div className="bg-gradient-to-br from-dynac-sand to-dynac-sand/80 p-5 rounded-2xl border border-dynac-lightBrown/10 shadow-lg">
-        <div className="flex justify-between items-start">
-          <div className="flex-1 pr-4">
-            {/* Location Title - Proper Capitalization */}
+        <div className="flex justify-between items-start gap-4">
+          {/* Left Side - Location & Info */}
+          <div className="flex-1">
+            {/* Location Title */}
             <div className="flex items-center gap-3 mb-3">
               <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(currentDay.location)}`} target="_blank" rel="noopener noreferrer" className="text-2xl font-bold text-dynac-darkChoc leading-tight hover:underline decoration-dynac-lightBrown/30 flex items-center gap-2 group capitalize">
                 {currentDay.location}
@@ -396,11 +420,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ itinerary, onSwapRequest, 
                 onClick={handlePlayGreeting}
                 disabled={isPlayingGreeting}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold border transition-all duration-300 ${isPlayingGreeting
-                  ? 'bg-dynac-lightBrown text-dynac-cream border-dynac-lightBrown scale-105 shadow-md'
+                  ? 'bg-dynac-lightBrown text-dynac-cream border-dynac-lightBrown scale-105 shadow-md animate-pulse'
                   : 'bg-white text-dynac-darkChoc border-dynac-lightBrown/20 hover:bg-dynac-cream hover:shadow-md hover:border-dynac-lightBrown/40'}`}
               >
-                <Volume2 size={14} className={isPlayingGreeting ? 'animate-pulse' : ''} />
-                <span>{greetingText || "🗣️ Play Local Greeting"}</span>
+                <Volume2 size={14} />
+                <span>{currentGreeting}</span>
               </button>
             </div>
 
@@ -414,20 +438,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ itinerary, onSwapRequest, 
               </div>
             )}
 
-            {/* Weather & Outfit Info */}
-            <div className="flex flex-wrap gap-2">
-              <div className="flex items-center gap-2 bg-white/80 px-3 py-2 rounded-lg text-sm text-dynac-darkChoc font-medium border border-dynac-sand shadow-sm">
-                <CloudRain size={14} className="text-blue-500" />
-                <span>{currentDay.weather.tempMax} / {currentDay.weather.tempMin} • {currentDay.weather.condition}</span>
-              </div>
-              <div className="flex items-center gap-2 bg-white/80 px-3 py-2 rounded-lg text-sm text-dynac-darkChoc font-medium border border-dynac-sand shadow-sm">
-                <span className="text-orange-500 font-bold">UV</span>
-                <span>{currentDay.weather.uvIndex}</span>
-              </div>
-              <div className="flex items-center gap-2 bg-white/60 px-3 py-2 rounded-lg text-sm text-dynac-nutBrown border border-dynac-sand/50">
-                <Shirt size={14} />
-                {currentDay.outfit}
-              </div>
+            {/* Outfit Suggestion */}
+            <div className="flex items-center gap-2 bg-white/60 px-3 py-2 rounded-lg text-sm text-dynac-nutBrown border border-dynac-sand/50 w-fit">
+              <Shirt size={14} />
+              {currentDay.outfit}
+            </div>
+          </div>
+
+          {/* Right Side - Weather Visual */}
+          <div className="flex-shrink-0 bg-white/80 rounded-2xl p-4 border border-dynac-sand shadow-md text-center min-w-[120px]">
+            <div className="mb-2">
+              {getWeatherIcon(currentDay.weather?.condition || '')}
+            </div>
+            <div className="text-2xl font-bold text-dynac-darkChoc">
+              {currentDay.weather?.tempMax}
+            </div>
+            <div className="text-sm text-dynac-nutBrown">
+              {currentDay.weather?.tempMin}
+            </div>
+            <div className="text-xs font-medium text-dynac-lightBrown mt-1 capitalize">
+              {currentDay.weather?.condition}
+            </div>
+            <div className="flex items-center justify-center gap-1 mt-2 text-xs text-orange-500 font-bold">
+              <span>UV</span>
+              <span>{currentDay.weather?.uvIndex}</span>
             </div>
           </div>
         </div>
