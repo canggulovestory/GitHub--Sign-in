@@ -12,10 +12,9 @@ export const supabase = createClient(
     supabaseAnonKey || 'placeholder',
     {
         auth: {
-            autoRefreshToken: true, // Auto refresh token
-            persistSession: true, // Persist session in local storage
-            detectSessionInUrl: false,  // Disable auto-detection to prevent race conditions with manual handling
-            flowType: 'implicit'       // Use implicit flow for SPA
+            autoRefreshToken: true,
+            persistSession: true,
+            detectSessionInUrl: true  // Re-enable to let Supabase handle the code/token
         }
     }
 );
@@ -76,45 +75,36 @@ export const onAuthStateChange = (callback: (user: User | null) => void) => {
  * Handle OAuth callback manually - bypasses the 120s stale token check
  * Call this on app load to recover session from URL hash
  */
-export const handleOAuthCallback = async (): Promise<Session | null> => {
-    // Check if we have OAuth tokens in the URL hash
-    const hash = window.location.hash;
-    if (!hash || !hash.includes('access_token')) {
-        console.log('[Supabase Auth] No OAuth tokens in URL');
+}
+
+console.log('[Supabase Auth] Found OAuth parameters, waiting for Supabase to process...');
+
+try {
+    // If it's a code (PKCE), Supabase's internal auth listener usually handles it,
+    // but we can try to get the session explicitly to be sure.
+    const { data: { session }, error } = await supabase.auth.getSession();
+
+    if (error) {
+        console.error('[Supabase Auth] Session retrieval error:', error.message);
+        // If it's the "flow_state_not_found" or similar, it might be due to dual processing
         return null;
     }
 
-    console.log('[Supabase Auth] Found OAuth tokens in URL hash, attempting manual recovery...');
-
-    try {
-        // Parse hash parameters
-        const hashParams = new URLSearchParams(hash.substring(1));
-        const access_token = hashParams.get('access_token');
-        const refresh_token = hashParams.get('refresh_token');
-
-        if (!access_token || !refresh_token) {
-            console.log('[Supabase Auth] Missing tokens in hash');
-            return null;
+    if (session) {
+        console.log('[Supabase Auth] Manual session check successful:', session.user?.email);
+        // Clear URL params/hash if Supabase didn't
+        if (code) {
+            url.searchParams.delete('code');
+            window.history.replaceState(null, '', url.pathname);
+        } else if (hash) {
+            window.history.replaceState(null, '', window.location.pathname);
         }
-
-        // Manually set the session (bypasses stale token check)
-        const { data, error } = await supabase.auth.setSession({
-            access_token,
-            refresh_token
-        });
-
-        if (error) {
-            console.error('[Supabase Auth] Manual session set failed:', error.message);
-            return null;
-        }
-
-        // Clear the hash from URL to prevent re-processing
-        window.history.replaceState(null, '', window.location.pathname);
-
-        console.log('[Supabase Auth] Manual session recovery successful:', data.session?.user?.email);
-        return data.session;
-    } catch (e) {
-        console.error('[Supabase Auth] OAuth callback error:', e);
-        return null;
+        return session;
     }
+
+    return null;
+} catch (e) {
+    console.error('[Supabase Auth] OAuth callback processing error:', e);
+    return null;
+}
 };

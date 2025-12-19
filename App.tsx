@@ -77,43 +77,52 @@ const App: React.FC = () => {
 
   // --- SUPABASE AUTH STATE LISTENER ---
   useEffect(() => {
+    let isInitialCheck = true;
+
     // Check for existing session on mount (handles OAuth redirect)
     const initSession = async () => {
+      console.log('[App] Starting initial session check...');
       try {
-        // First try manual OAuth callback (bypasses 120s stale token check)
+        // 1. Manually check for OAuth callback first (PKCE code or Implicit token)
         const oauthSession = await handleOAuthCallback();
         if (oauthSession?.user) {
-          console.log('[App] OAuth callback session found:', oauthSession.user.email);
+          console.log('[App] OAuth callback session verified:', oauthSession.user.email);
           setUserFromSupabase(oauthSession.user);
           setIsAuthLoading(false);
+          isInitialCheck = false;
           return;
         }
 
-        // Fallback to regular session check
+        // 2. Regular session check (Local Storage / Cookie)
         const { data: { session } } = await supabase.auth.getSession();
         console.log('[App] Initial session check:', session?.user?.email || 'No session');
 
         if (session?.user) {
           setUserFromSupabase(session.user);
         }
-        setIsAuthLoading(false);
       } catch (error) {
         console.error('[App] Session check error:', error);
+      } finally {
         setIsAuthLoading(false);
+        isInitialCheck = false;
       }
     };
 
-    initSession();
-
     // Listen for future auth changes (sign in, sign out, token refresh)
     const { data: { subscription } } = onAuthStateChange((supabaseUser) => {
+      // Avoid clearing user if we are still doing the initial check
+      if (isInitialCheck && !supabaseUser) return;
+
       console.log('[App] Auth state changed:', supabaseUser?.email || 'No user');
       if (supabaseUser) {
         setUserFromSupabase(supabaseUser);
+        setIsAuthLoading(false);
       } else {
         setUser(null);
       }
     });
+
+    initSession();
 
     return () => subscription.unsubscribe();
   }, []);
