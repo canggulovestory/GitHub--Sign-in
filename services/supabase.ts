@@ -12,9 +12,9 @@ export const supabase = createClient(
     supabaseAnonKey || 'placeholder',
     {
         auth: {
-            autoRefreshToken: true,
-            persistSession: true,
-            detectSessionInUrl: true,  // Ensure OAuth hash params are detected
+            autoRefreshToken: true, // Auto refresh token
+            persistSession: true, // Persist session in local storage
+            detectSessionInUrl: false,  // Disable auto-detection to prevent race conditions with manual handling
             flowType: 'implicit'       // Use implicit flow for SPA
         }
     }
