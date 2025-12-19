@@ -27,10 +27,13 @@ export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
  * Sign in with Google OAuth via Supabase
  */
 export const signInWithGoogle = async () => {
+    const redirectTo = window.location.origin;
+    console.log('[Supabase Auth] Initiating Google OAuth with redirect URL:', redirectTo);
+
     const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-            redirectTo: window.location.origin  // Redirect back to app after auth
+            redirectTo
         }
     });
     if (error) throw error;
