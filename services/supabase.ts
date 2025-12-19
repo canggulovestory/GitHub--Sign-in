@@ -71,40 +71,45 @@ export const onAuthStateChange = (callback: (user: User | null) => void) => {
     });
 };
 
-/**
- * Handle OAuth callback manually - bypasses the 120s stale token check
- * Call this on app load to recover session from URL hash
- */
-}
+export const handleOAuthCallback = async (): Promise<Session | null> => {
+    // Check for tokens in the URL (PKCE or Implicit)
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    const hash = window.location.hash;
 
-console.log('[Supabase Auth] Found OAuth parameters, waiting for Supabase to process...');
-
-try {
-    // If it's a code (PKCE), Supabase's internal auth listener usually handles it,
-    // but we can try to get the session explicitly to be sure.
-    const { data: { session }, error } = await supabase.auth.getSession();
-
-    if (error) {
-        console.error('[Supabase Auth] Session retrieval error:', error.message);
-        // If it's the "flow_state_not_found" or similar, it might be due to dual processing
+    if (!code && (!hash || !hash.includes('access_token'))) {
+        console.log('[Supabase Auth] No OAuth tokens/codes in URL');
         return null;
     }
 
-    if (session) {
-        console.log('[Supabase Auth] Manual session check successful:', session.user?.email);
-        // Clear URL params/hash if Supabase didn't
-        if (code) {
-            url.searchParams.delete('code');
-            window.history.replaceState(null, '', url.pathname);
-        } else if (hash) {
-            window.history.replaceState(null, '', window.location.pathname);
-        }
-        return session;
-    }
+    console.log('[Supabase Auth] Found OAuth parameters, waiting for Supabase to process...');
 
-    return null;
-} catch (e) {
-    console.error('[Supabase Auth] OAuth callback processing error:', e);
-    return null;
-}
+    try {
+        // If it's a code (PKCE), Supabase's internal auth listener usually handles it,
+        // but we can try to get the session explicitly to be sure.
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        if (error) {
+            console.error('[Supabase Auth] Session retrieval error:', error.message);
+            // If it's the "flow_state_not_found" or similar, it might be due to dual processing
+            return null;
+        }
+
+        if (session) {
+            console.log('[Supabase Auth] Manual session check successful:', session.user?.email);
+            // Clear URL params/hash if Supabase didn't
+            if (code) {
+                url.searchParams.delete('code');
+                window.history.replaceState(null, '', url.pathname);
+            } else if (hash) {
+                window.history.replaceState(null, '', window.location.pathname);
+            }
+            return session;
+        }
+
+        return null;
+    } catch (e) {
+        console.error('[Supabase Auth] OAuth callback processing error:', e);
+        return null;
+    }
 };
