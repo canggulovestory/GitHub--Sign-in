@@ -332,3 +332,65 @@ Generate check-in URL based on airline if not visible in document:
     };
   }
 };
+
+// --- LOCATION AUTOCOMPLETE (AI-POWERED) ---
+export const getLocationSuggestions = async (
+  query: string,
+  destination: string
+): Promise<string[]> => {
+  if (!query || query.length < 2) return [];
+
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) return [];
+
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+
+    const prompt = `You are a travel location autocomplete assistant. The user is planning a trip to "${destination}".
+
+User is typing: "${query}"
+
+Suggest 5 real, specific locations that match. Include mix of:
+- Famous landmarks and attractions
+- Restaurants and cafes
+- Hotels and accommodations
+- Museums and cultural sites
+- Parks and outdoor spaces
+- Shopping areas
+
+Return ONLY a JSON array of location strings. Each should include the specific name and area/neighborhood.
+Example format: ["Eiffel Tower, Champ de Mars", "Louvre Museum, 1st Arrondissement", "Café de Flore, Saint-Germain-des-Prés"]
+
+Return only locations in or near ${destination}. No explanations, just the JSON array.`;
+
+    const result = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        temperature: 0.3,
+        responseMimeType: "application/json"
+      }
+    });
+
+    // Extract text with proper fallback handling for SDK variations
+    let text = '';
+    if (typeof (result as any).text === 'function') {
+      text = (result as any).text();
+    } else if ((result as any).response && typeof (result as any).response.text === 'function') {
+      text = (result as any).response.text();
+    } else if ((result as any).response?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      text = (result as any).response.candidates[0].content.parts[0].text;
+    } else if ((result as any).candidates?.[0]?.content?.parts?.[0]?.text) {
+      text = (result as any).candidates[0].content.parts[0].text;
+    }
+    
+    if (!text) return [];
+
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed.slice(0, 5) : [];
+
+  } catch (e) {
+    console.error("[LocationSuggestions] Error:", e);
+    return [];
+  }
+};

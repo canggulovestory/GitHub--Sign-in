@@ -3,22 +3,19 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, ArrowRight, User, Loader2, ScanFace, Mail, Lock as LockIcon, ChevronLeft, AlertCircle } from 'lucide-react';
 import { BiometricLayer } from './BiometricLayer';
 import { UserProfile } from '../types';
-import { jwtDecode } from "jwt-decode";
+import { signInWithGoogle, supabase } from '../services/supabase';
 
 interface LoginPageProps {
   onLogin: (profile: UserProfile) => void;
 }
 
-// Google Client ID from environment variables
-const GOOGLE_CLIENT_ID = process.env.VITE_GOOGLE_CLIENT_ID || "";
-
 export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
-  const [isGsiLoaded, setIsGsiLoaded] = useState(false);
   const [isReturningUser, setIsReturningUser] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [step, setStep] = useState<'landing' | 'form' | 'processing' | 'biometric'>('landing');
+  const [error, setError] = useState<string | null>(null);
 
-  // Registration Form State
+  // Registration Form State (for email/password backup)
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -26,124 +23,69 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     password: ''
   });
 
-  // --- GOOGLE SCRIPT LOADER ---
-  useEffect(() => {
-    // Check if script is already loaded from index.html
-    const checkGsi = setInterval(() => {
-      // @ts-ignore
-      if (typeof window !== 'undefined' && window.google && window.google.accounts) {
-        setIsGsiLoaded(true);
-        clearInterval(checkGsi);
-      }
-    }, 200);
-
-    // Timeout to stop checking after 10 seconds to avoid infinite loop if script fails
-    const timeout = setTimeout(() => {
-      clearInterval(checkGsi);
-    }, 10000);
-
-    return () => {
-      clearInterval(checkGsi);
-      clearTimeout(timeout);
-    };
-  }, []);
-
-  // --- REAL GOOGLE AUTH HANDLER ---
-  const handleGoogleCredentialResponse = (response: any) => {
+  // --- SUPABASE AUTH: Handle Google Sign-In ---
+  const handleGoogleSignIn = async () => {
     try {
+      setError(null);
       setStep('processing');
-      console.log("[Google Auth] Received Credential");
+      console.log("[Supabase Auth] Starting Google OAuth...");
 
-      // Decode the JWT Token returned by Google
-      const decoded: any = jwtDecode(response.credential);
+      // This redirects to Google, then back to our app
+      await signInWithGoogle();
 
-      // Map Google Profile to App Profile
-      const userProfile: UserProfile = {
-        id: `GOOGLE-${decoded.sub}`,
-        name: decoded.name || (decoded.given_name ? `${decoded.given_name} ${decoded.family_name}` : 'Google User'),
-        email: decoded.email,
-        avatarUrl: decoded.picture,
-        subscriptionTier: 'Free', // Default tier
-        biometricEnabled: true,   // Trust Google auth for biometric readiness
-        isAuthenticated: true
-      };
-
-      // Complete Login
-      onLogin(userProfile);
-
-    } catch (error) {
-      console.error("Google Auth Error:", error);
-      alert("Failed to process Google Sign-In.");
+      // Note: The page will redirect, so we won't reach here immediately
+      // The auth state listener in App.tsx will handle the session
+    } catch (err: any) {
+      console.error("[Supabase Auth] Error:", err);
+      setError(err.message || "Failed to sign in with Google");
       setStep('form');
     }
   };
 
-  // --- RENDER GOOGLE BUTTON ---
-  useEffect(() => {
-    // Only render if script loaded and we are in the form step
-    if (isGsiLoaded && step === 'form') {
-      if (!GOOGLE_CLIENT_ID) {
-        console.warn("Google Client ID is missing. Google Sign-In disabled.");
-        return;
-      }
-
-      try {
-        // @ts-ignore
-        const google = window.google;
-
-        // Initialize the library
-        google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          callback: handleGoogleCredentialResponse,
-          auto_select: false,
-          cancel_on_tap_outside: true
-        });
-
-        const btnContainer = document.getElementById("googleBtnContainer");
-        if (btnContainer) {
-          btnContainer.innerHTML = ''; // Clear previous
-
-          // Render the button
-          google.accounts.id.renderButton(
-            btnContainer,
-            {
-              theme: "outline",
-              size: "large",
-              text: "continue_with",
-              shape: "rectangular",
-              logo_alignment: "left",
-              width: "100%" // Adapts to container width
-            }
-          );
-        }
-      } catch (e) {
-        console.error("GSI Render Error", e);
-      }
-    }
-  }, [step, authMode, isGsiLoaded]);
-
-  // --- MANUAL AUTH (FALLBACK) ---
-  const mockBackendAuth = async (data: any): Promise<UserProfile> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          id: `USER-${Date.now()}`,
-          email: data.email,
-          name: data.firstName ? `${data.firstName} ${data.lastName}` : 'Traveler',
-          subscriptionTier: 'Free',
-          biometricEnabled: false,
-          isAuthenticated: true,
-          avatarUrl: `https://ui-avatars.com/api/?name=${data.email}&background=random`
-        });
-      }, 1500);
-    });
-  };
-
+  // --- MANUAL AUTH (Email/Password via Supabase) ---
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     setStep('processing');
-    const userProfile = await mockBackendAuth(formData);
-    onLogin(userProfile);
+
+    try {
+      if (authMode === 'signup') {
+        // Sign up with email/password
+        const { data, error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
+              full_name: `${formData.firstName} ${formData.lastName}`
+            }
+          }
+        });
+
+        if (error) throw error;
+
+        if (data.user && !data.session) {
+          // Email confirmation required
+          setError("Check your email to confirm your account!");
+          setStep('form');
+          return;
+        }
+
+      } else {
+        // Sign in with email/password
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password
+        });
+
+        if (error) throw error;
+      }
+
+      // Auth state listener in App.tsx will handle the session
+    } catch (err: any) {
+      console.error("[Supabase Auth] Error:", err);
+      setError(err.message || "Authentication failed");
+      setStep('form');
+    }
   };
 
   if (step === 'biometric') {
@@ -233,19 +175,27 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               {authMode === 'signup' ? 'Create Account' : 'Sign In'}
             </h2>
 
-            {/* --- GOOGLE SIGN IN SECTION --- */}
+            {/* --- GOOGLE SIGN IN VIA SUPABASE --- */}
             <div className="mb-6">
-              <div className="space-y-3 w-full">
-                {/* The Google Button Container */}
-                {GOOGLE_CLIENT_ID ? (
-                  <div id="googleBtnContainer" className="w-full flex justify-center"></div>
-                ) : (
-                  <div className="text-xs text-red-400 text-center bg-red-500/10 p-3 rounded border border-red-500/20">
-                    Google Login Config Missing<br />
-                    <span className="opacity-70 text-[10px]">Add VITE_GOOGLE_CLIENT_ID to .env</span>
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={handleGoogleSignIn}
+                className="w-full bg-white text-gray-700 font-medium py-3 px-4 rounded-xl flex items-center justify-center gap-3 hover:bg-gray-50 transition-colors shadow-md border border-gray-200"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                </svg>
+                Continue with Google
+              </button>
+
+              {error && (
+                <div className="mt-3 text-xs text-red-400 text-center bg-red-500/10 p-3 rounded border border-red-500/20 flex items-center gap-2 justify-center">
+                  <AlertCircle size={14} />
+                  {error}
+                </div>
+              )}
             </div>
             {/* ------------------------------- */}
 

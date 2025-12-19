@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { DayPlan, ItineraryItem, Alert } from '../types';
-import { MapPin, Clock, Shirt, Volume2, CloudRain, AlertTriangle, Calendar, Info, Plus, X, ChevronRight, ChevronLeft, ExternalLink, Plane, DollarSign, Sun, Cloud, CloudSnow, Droplets } from 'lucide-react';
+import { MapPin, Clock, Shirt, Volume2, CloudRain, AlertTriangle, Calendar, Info, Plus, X, ChevronRight, ChevronLeft, ExternalLink, Plane, DollarSign, Sun, Cloud, CloudSnow, Droplets, Loader2, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
+import { getLocationSuggestions } from '../services/geminiService';
 
 /* --- HELPERS --- */
 
@@ -57,7 +58,27 @@ const AlertBanner: React.FC<{ alert: Alert }> = ({ alert }) => {
   );
 };
 
-const ItineraryCard: React.FC<{ item: ItineraryItem; isLast: boolean; isCurrent: boolean; onSwap: () => void }> = ({ item, isLast, isCurrent, onSwap }) => {
+const ItineraryCard: React.FC<{
+  item: ItineraryItem;
+  isLast: boolean;
+  isFirst: boolean;
+  isCurrent: boolean;
+  onSwap: () => void;
+  onEdit: (updatedItem: ItineraryItem) => void;
+  onDelete: () => void;
+  onMove: (direction: 'up' | 'down') => void;
+  destination: string;
+}> = ({ item, isLast, isFirst, isCurrent, onSwap, onEdit, onDelete, onMove, destination }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedItem, setEditedItem] = useState<ItineraryItem>(item);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Location autocomplete state
+  const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
   const isAmbiguous = item.notes?.includes("Ambiguity");
   const cardBg = isCurrent ? 'bg-dynac-lightBrown text-dynac-cream shadow-md' : 'bg-transparent text-dynac-darkChoc border border-dynac-lightBrown/20 hover:bg-dynac-sand/30';
   const subText = isCurrent ? 'text-dynac-sand' : 'text-dynac-nutBrown';
@@ -66,6 +87,158 @@ const ItineraryCard: React.FC<{ item: ItineraryItem; isLast: boolean; isCurrent:
     ? 'border-dynac-sand text-dynac-sand hover:bg-dynac-sand hover:text-dynac-lightBrown'
     : 'border-dynac-lightBrown/30 text-dynac-nutBrown hover:bg-dynac-lightBrown hover:text-dynac-cream';
 
+  const handleSave = () => {
+    onEdit(editedItem);
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditedItem(item);
+    setIsEditing(false);
+  };
+
+  // Debounced location search
+  const handleLocationChange = (value: string) => {
+    setEditedItem({ ...editedItem, location: value });
+
+    // Clear previous timeout
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    // Debounce API call
+    if (value.length >= 2) {
+      setIsLoadingSuggestions(true);
+      debounceRef.current = setTimeout(async () => {
+        const suggestions = await getLocationSuggestions(value, destination);
+        setLocationSuggestions(suggestions);
+        setIsLoadingSuggestions(false);
+        setShowSuggestions(suggestions.length > 0);
+      }, 500);
+    } else {
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+      setIsLoadingSuggestions(false);
+    }
+  };
+
+  const selectSuggestion = (suggestion: string) => {
+    setEditedItem({ ...editedItem, location: suggestion });
+    setShowSuggestions(false);
+    setLocationSuggestions([]);
+  };
+
+  // Edit mode UI
+  if (isEditing) {
+    return (
+      <div className="flex gap-4 group">
+        <div className="flex flex-col items-center">
+          <div className="w-3 h-3 rounded-full bg-blue-500 ring-2 ring-offset-2 ring-offset-dynac-cream ring-blue-500" />
+          {!isLast && <div className="w-0.5 flex-1 bg-blue-300 my-1" />}
+        </div>
+        <div className="flex-1 p-4 rounded-lg bg-blue-50 border-2 border-blue-300 shadow-md">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-xs font-bold text-blue-600">✏️ EDITING</span>
+            <div className="flex gap-2">
+              <button onClick={handleSave} className="text-xs px-3 py-1 rounded bg-green-500 text-white hover:bg-green-600 transition-colors">
+                Save
+              </button>
+              <button onClick={handleCancel} className="text-xs px-3 py-1 rounded bg-gray-400 text-white hover:bg-gray-500 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex gap-3">
+              <div className="flex-shrink-0">
+                <label className="text-xs text-blue-700 font-medium">Time</label>
+                <input
+                  type="time"
+                  value={editedItem.time}
+                  onChange={(e) => setEditedItem({ ...editedItem, time: e.target.value })}
+                  className="block w-24 p-2 text-sm border rounded bg-white border-blue-200 focus:border-blue-400 outline-none"
+                />
+              </div>
+              <div className="flex-shrink-0">
+                <label className="text-xs text-blue-700 font-medium">Type</label>
+                <select
+                  value={editedItem.type}
+                  onChange={(e) => setEditedItem({ ...editedItem, type: e.target.value as any })}
+                  className="block w-28 p-2 text-sm border rounded bg-white border-blue-200 focus:border-blue-400 outline-none"
+                >
+                  <option value="activity">Activity</option>
+                  <option value="dining">Dining</option>
+                  <option value="transport">Transport</option>
+                  <option value="leisure">Leisure</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-blue-700 font-medium">Activity Name</label>
+              <input
+                type="text"
+                value={editedItem.activity}
+                onChange={(e) => setEditedItem({ ...editedItem, activity: e.target.value })}
+                placeholder="Activity name"
+                className="w-full p-2 text-sm border rounded bg-white border-blue-200 focus:border-blue-400 outline-none"
+              />
+            </div>
+
+            <div className="relative">
+              <label className="text-xs text-blue-700 font-medium flex items-center gap-1">
+                Location
+                {isLoadingSuggestions && <Loader2 size={12} className="animate-spin text-blue-500" />}
+              </label>
+              <input
+                type="text"
+                value={editedItem.location}
+                onChange={(e) => handleLocationChange(e.target.value)}
+                onFocus={() => locationSuggestions.length > 0 && setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                placeholder="Start typing... (e.g., Eiffel)"
+                className="w-full p-2 text-sm border rounded bg-white border-blue-200 focus:border-blue-400 outline-none"
+              />
+              {/* AI Suggestions Dropdown */}
+              {showSuggestions && locationSuggestions.length > 0 && (
+                <div className="absolute z-20 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                  <div className="px-2 py-1 text-[10px] text-blue-500 bg-blue-50 border-b border-blue-100 font-medium">
+                    ✨ AI Suggestions
+                  </div>
+                  {locationSuggestions.map((suggestion, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => selectSuggestion(suggestion)}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-0 flex items-center gap-2"
+                    >
+                      <MapPin size={12} className="text-blue-400 flex-shrink-0" />
+                      <span>{suggestion}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs text-blue-700 font-medium">Notes (optional)</label>
+              <input
+                type="text"
+                value={editedItem.notes || ''}
+                onChange={(e) => setEditedItem({ ...editedItem, notes: e.target.value || undefined })}
+                placeholder="Any notes..."
+                className="w-full p-2 text-sm border rounded bg-white border-blue-200 focus:border-blue-400 outline-none"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Normal view mode
   return (
     <div className="flex gap-4 group">
       <div className="flex flex-col items-center">
@@ -78,9 +251,39 @@ const ItineraryCard: React.FC<{ item: ItineraryItem; isLast: boolean; isCurrent:
           <span className={`text-xs font-bold flex items-center gap-1 ${iconColor}`}>
             <Clock size={12} /> {item.time}
           </span>
-          <button onClick={onSwap} className={`text-xs px-2 py-0.5 rounded border transition-colors ${btnStyle}`}>
-            Reschedule
-          </button>
+          <div className="flex gap-1 items-center">
+            {/* Move buttons */}
+            <button
+              onClick={() => onMove('up')}
+              disabled={isFirst}
+              className={`p-1 rounded transition-colors ${isFirst ? 'opacity-30 cursor-not-allowed' : btnStyle}`}
+              title="Move up"
+            >
+              <ChevronUp size={14} />
+            </button>
+            <button
+              onClick={() => onMove('down')}
+              disabled={isLast}
+              className={`p-1 rounded transition-colors ${isLast ? 'opacity-30 cursor-not-allowed' : btnStyle}`}
+              title="Move down"
+            >
+              <ChevronDown size={14} />
+            </button>
+            <div className="w-px h-4 bg-current opacity-20 mx-1" />
+            <button onClick={() => setIsEditing(true)} className={`text-xs px-2 py-0.5 rounded border transition-colors ${btnStyle}`}>
+              Edit
+            </button>
+            <button onClick={onSwap} className={`text-xs px-2 py-0.5 rounded border transition-colors ${btnStyle}`}>
+              Reschedule
+            </button>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-xs px-2 py-0.5 rounded border transition-colors border-red-300 text-red-500 hover:bg-red-500 hover:text-white"
+              title="Delete"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
         </div>
 
         <h4 className="font-semibold text-lg">{item.activity}</h4>
@@ -117,6 +320,27 @@ const ItineraryCard: React.FC<{ item: ItineraryItem; isLast: boolean; isCurrent:
             {item.notes}
           </div>
         )}
+
+        {/* Delete Confirmation Dialog */}
+        {showDeleteConfirm && (
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700 mb-2">Delete "{item.activity}"?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { onDelete(); setShowDeleteConfirm(false); }}
+                className="text-xs px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+              >
+                Yes, Delete
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="text-xs px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -128,11 +352,14 @@ interface DashboardProps {
   itinerary: DayPlan[];
   onSwapRequest: (dayIndex: number, itemId: string) => void;
   onAddActivity: (item: ItineraryItem) => void;
+  onEditActivity: (dayIndex: number, updatedItem: ItineraryItem) => void;
+  onDeleteActivity: (dayIndex: number, itemId: string) => void;
+  onMoveActivity: (dayIndex: number, itemId: string, direction: 'up' | 'down') => void;
   activeTrip?: any;
   userPreferences?: any;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ itinerary, onSwapRequest, onAddActivity, activeTrip, userPreferences }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ itinerary, onSwapRequest, onAddActivity, onEditActivity, onDeleteActivity, onMoveActivity, activeTrip, userPreferences }) => {
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const currentDay = itinerary[selectedDayIndex];
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -499,7 +726,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ itinerary, onSwapRequest, 
 
         <div className="space-y-4">
           {currentDay.items.map((item, idx) => (
-            <ItineraryCard key={item.id} item={item} isLast={idx === currentDay.items.length - 1} isCurrent={false} onSwap={() => onSwapRequest(selectedDayIndex, item.id)} />
+            <ItineraryCard
+              key={item.id}
+              item={item}
+              isFirst={idx === 0}
+              isLast={idx === currentDay.items.length - 1}
+              isCurrent={false}
+              onSwap={() => onSwapRequest(selectedDayIndex, item.id)}
+              onEdit={(updatedItem) => onEditActivity(selectedDayIndex, updatedItem)}
+              onDelete={() => onDeleteActivity(selectedDayIndex, item.id)}
+              onMove={(direction) => onMoveActivity(selectedDayIndex, item.id, direction)}
+              destination={activeTrip?.destination || currentDay.location || ''}
+            />
+
           ))}
           {currentDay.items.length === 0 && <div className="text-center py-10 text-dynac-nutBrown italic text-sm">No activities planned for this day yet.</div>}
         </div>

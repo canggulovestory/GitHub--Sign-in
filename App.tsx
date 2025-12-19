@@ -6,7 +6,8 @@ import {
   INITIAL_PREFERENCES,
   MOCK_CHECKLIST
 } from './constants';
-import { saveSession, getSession, saveUserData, loadUserData, clearSession } from './utils/storage';
+import { saveUserData, loadUserData } from './utils/storage';
+import { onAuthStateChange, signOut as supabaseSignOut, supabase, handleOAuthCallback } from './services/supabase';
 import { AppTab, ChatMessage, DayPlan, ChecklistItem, DocumentFile, UserPreferences, ItineraryItem, UserProfile, Trip, Traveler } from './types';
 import { Dashboard } from './components/Dashboard';
 import { DocumentHub } from './components/DocumentHub';
@@ -38,6 +39,7 @@ import { generateAIStudioExport } from './utils/exportUtils';
 const App: React.FC = () => {
   // --- AUTHENTICATION STATE ---
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   // --- APP STATE ---
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.TRIPS); // Default to Trip List
@@ -57,22 +59,82 @@ const App: React.FC = () => {
   const activeTrip = trips.find(t => t.id === activeTripId);
   const itinerary = activeTrip ? activeTrip.itinerary : [];
 
-  // --- HANDLERS ---
-  // --- HANDLERS ---
-
-  const handleLogin = (userProfile: UserProfile) => {
+  // Helper function to set user from Supabase user
+  const setUserFromSupabase = (supabaseUser: any) => {
+    const userProfile: UserProfile = {
+      id: supabaseUser.id,
+      email: supabaseUser.email || '',
+      name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'Traveler',
+      avatarUrl: supabaseUser.user_metadata?.avatar_url || supabaseUser.user_metadata?.picture,
+      subscriptionTier: 'Free',
+      biometricEnabled: true,
+      isAuthenticated: true
+    };
     setUser(userProfile);
-    saveSession(userProfile); // Persist session
+    loadDataForUser(userProfile);
+    console.log('[App] User authenticated:', userProfile.email);
+  };
+
+  // --- SUPABASE AUTH STATE LISTENER ---
+  useEffect(() => {
+    // Check for existing session on mount (handles OAuth redirect)
+    const initSession = async () => {
+      try {
+        // First try manual OAuth callback (bypasses 120s stale token check)
+        const oauthSession = await handleOAuthCallback();
+        if (oauthSession?.user) {
+          console.log('[App] OAuth callback session found:', oauthSession.user.email);
+          setUserFromSupabase(oauthSession.user);
+          setIsAuthLoading(false);
+          return;
+        }
+
+        // Fallback to regular session check
+        const { data: { session } } = await supabase.auth.getSession();
+        console.log('[App] Initial session check:', session?.user?.email || 'No session');
+
+        if (session?.user) {
+          setUserFromSupabase(session.user);
+        }
+        setIsAuthLoading(false);
+      } catch (error) {
+        console.error('[App] Session check error:', error);
+        setIsAuthLoading(false);
+      }
+    };
+
+    initSession();
+
+    // Listen for future auth changes (sign in, sign out, token refresh)
+    const { data: { subscription } } = onAuthStateChange((supabaseUser) => {
+      console.log('[App] Auth state changed:', supabaseUser?.email || 'No user');
+      if (supabaseUser) {
+        setUserFromSupabase(supabaseUser);
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // --- HANDLERS ---
+  const handleLogin = (userProfile: UserProfile) => {
+    // This is now mostly handled by onAuthStateChange
+    // But keep for fallback/manual email auth
+    setUser(userProfile);
     loadDataForUser(userProfile);
     setActiveTab(AppTab.TRIPS);
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    clearSession(); // Clear session
-    setIsMenuOpen(false);
-    // Optional: Clear state to avoid flash on next login? 
-    // Actually React state will be essentially hidden/unused until next login overwrites it.
+  const handleLogout = async () => {
+    try {
+      await supabaseSignOut();
+      setUser(null);
+      setIsMenuOpen(false);
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
   };
 
   const handleExportData = () => {
@@ -136,6 +198,82 @@ const App: React.FC = () => {
     });
     setTrips(updatedTrips);
   };
+
+  const handleEditActivity = (dayIndex: number, updatedItem: ItineraryItem) => {
+    if (!activeTrip) return;
+
+    const updatedTrips = trips.map(t => {
+      if (t.id === activeTripId) {
+        const newItinerary = [...t.itinerary];
+        if (newItinerary[dayIndex]) {
+          // Find and replace the item
+          const itemIndex = newItinerary[dayIndex].items.findIndex(i => i.id === updatedItem.id);
+          if (itemIndex !== -1) {
+            newItinerary[dayIndex].items[itemIndex] = updatedItem;
+            // Re-sort by time
+            newItinerary[dayIndex].items.sort((a, b) => a.time.localeCompare(b.time));
+          }
+        }
+        return { ...t, itinerary: newItinerary };
+      }
+      return t;
+    });
+    setTrips(updatedTrips);
+    console.log('[App] Activity edited:', updatedItem.activity);
+  };
+
+  const handleDeleteActivity = (dayIndex: number, itemId: string) => {
+    if (!activeTrip) return;
+
+    const updatedTrips = trips.map(t => {
+      if (t.id === activeTripId) {
+        const newItinerary = [...t.itinerary];
+        if (newItinerary[dayIndex]) {
+          newItinerary[dayIndex].items = newItinerary[dayIndex].items.filter(i => i.id !== itemId);
+        }
+        return { ...t, itinerary: newItinerary };
+      }
+      return t;
+    });
+    setTrips(updatedTrips);
+    console.log('[App] Activity deleted:', itemId);
+  };
+
+  const handleMoveActivity = (dayIndex: number, itemId: string, direction: 'up' | 'down') => {
+    if (!activeTrip) return;
+
+    const updatedTrips = trips.map(t => {
+      if (t.id === activeTripId) {
+        const newItinerary = [...t.itinerary];
+        if (newItinerary[dayIndex]) {
+          const items = [...newItinerary[dayIndex].items];
+          const currentIndex = items.findIndex(i => i.id === itemId);
+
+          if (currentIndex === -1) return t;
+
+          const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+          // Check bounds
+          if (targetIndex < 0 || targetIndex >= items.length) return t;
+
+          // Swap items
+          [items[currentIndex], items[targetIndex]] = [items[targetIndex], items[currentIndex]];
+
+          // Also swap their times to maintain the visual order
+          const tempTime = items[currentIndex].time;
+          items[currentIndex].time = items[targetIndex].time;
+          items[targetIndex].time = tempTime;
+
+          newItinerary[dayIndex].items = items;
+        }
+        return { ...t, itinerary: newItinerary };
+      }
+      return t;
+    });
+    setTrips(updatedTrips);
+    console.log('[App] Activity moved:', itemId, direction);
+  };
+
 
   const handleAddDocument = (newDoc: DocumentFile) => {
     setDocuments(prev => [newDoc, ...prev]);
@@ -241,17 +379,16 @@ const App: React.FC = () => {
     }
   };
 
-  // --- SESSION INIT EFFECT ---
-  useEffect(() => {
-    const sessionUser = getSession();
-    if (sessionUser) {
-      console.log(`[App] Restoring session for ${sessionUser.email}`);
-      setUser(sessionUser);
-      loadDataForUser(sessionUser);
-    }
-  }, []);
+  // --- RENDER GUARDS ---
+  // Show loading while checking auth
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-dynac-deepBrown flex items-center justify-center">
+        <div className="text-dynac-cream animate-pulse">Loading...</div>
+      </div>
+    );
+  }
 
-  // --- RENDER GUARD ---
   if (!user) {
     return <LoginPage onLogin={handleLogin} />;
   }
@@ -425,9 +562,13 @@ const App: React.FC = () => {
                 itinerary={itinerary}
                 onSwapRequest={handleSwapRequest}
                 onAddActivity={handleAddActivity}
+                onEditActivity={handleEditActivity}
+                onDeleteActivity={handleDeleteActivity}
+                onMoveActivity={handleMoveActivity}
                 activeTrip={activeTrip}
                 userPreferences={preferences}
               />
+
             )}
 
             {activeTab === AppTab.CHAT && (
